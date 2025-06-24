@@ -1,67 +1,465 @@
 "use client";
-import { Bell, CheckCircle2, Clock, DollarSign, Star, MoreHorizontal, User, Flame } from "lucide-react"
-import { useState } from "react"
+import { Bell, CheckCircle2, Clock, DollarSign, Star, MoreHorizontal, User, Flame, LogOut, Settings } from "lucide-react"
+import { useState, useEffect } from "react"
 import Link from "next/link";
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
+import { useRouter } from "next/navigation"
 
 export default function Dash() {
   const [showNotifications, setShowNotifications] = useState(false)
+  const [showUserMenu, setShowUserMenu] = useState(false)
+  const [user, setUser] = useState(null)
+  const [isParentMode, setIsParentMode] = useState(false)
+  const [showParentPinModal, setShowParentPinModal] = useState(false)
+  const [parentPin, setParentPin] = useState("")
+  const [selectedKid, setSelectedKid] = useState(null)
+  const [kids, setKids] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [parentSession, setParentSession] = useState(null)
   
-  // Mock data for while ui is being built
-  const totalEarned = 247.5
-  const pendingEarnings = 18.5
-  
-  const availableTasks = [
-    { id: 1, title: "Take out trash", reward: 3.0, deadline: "Tonight", category: "Chores", difficulty: "Easy", timeEstimate: "5 min", urgent: true },
-    { id: 2, title: "Walk the dog", reward: 5.0, deadline: "Daily", category: "Pet care", difficulty: "Easy", timeEstimate: "20 min", urgent: false },
-    { id: 3, title: "Math homework", reward: 8.0, deadline: "Tomorrow", category: "School", difficulty: "Medium", timeEstimate: "45 min", urgent: true },
-    { id: 4, title: "Clean bedroom", reward: 7.5, deadline: "Weekend", category: "Chores", difficulty: "Medium", timeEstimate: "30 min", urgent: false },
-    { id: 5, title: "Grocery shopping", reward: 12.0, deadline: "Saturday", category: "Errands", difficulty: "Hard", timeEstimate: "1 hour", urgent: false },
-  ]
+  const [tasks, setTasks] = useState([])
+  const [completedTasks, setCompletedTasks] = useState([])
+  const [goals, setGoals] = useState([])
+  const [notifications, setNotifications] = useState([])
+  const [stats, setStats] = useState({
+    totalEarned: 0,
+    pendingEarnings: 0,
+    weeklyStats: {
+      tasksCompleted: 0,
+      earned: 0,
+      completionRate: 0,
+      currentStreak: 0,
+    }
+  })
 
-  const completedTasks = [
-    { id: 1, title: "Vacuum living room", reward: 6.0, completedAt: "2 hours ago", status: "pending" },
-    { id: 2, title: "Wash dishes", reward: 4.5, completedAt: "Yesterday", status: "approved" },
-    { id: 3, title: "History essay", reward: 15.0, completedAt: "2 days ago", status: "approved" },
-    { id: 4, title: "Feed cats", reward: 3.0, completedAt: "3 days ago", status: "approved" },
-  ]
+  const supabase = createClientComponentClient()
+  const router = useRouter()
 
-  const goals = [
-    { name: "New phone", target: 800, current: 247.5 },
-    { name: "Concert tickets", target: 150, current: 89.25 },
-  ]
+  useEffect(() => {
+    checkUser()
+    const interval = setInterval(checkParentSession, 30000)
+    return () => clearInterval(interval)
+  }, [])
 
-  const weeklyStats = {
-    tasksCompleted: 12,
-    earned: 67.5,
-    completionRate: 85,
-    currentStreak: 5,
+  const checkUser = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        router.push('/login')
+        return
+      }
+      
+      setUser(user)
+      
+      // Check for completed onboarding
+      const { data: family } = await supabase
+        .from('families')
+        .select('*')
+        .eq('parent_id', user.id)
+        .single()
+
+      if (!family) {
+        // No family  found.. redirect
+        router.push('/onboarding')
+        return
+      }
+      
+      await checkParentSession()
+      
+      if (!isParentMode) {
+        await loadKidsAndSelectDefault(user.id)
+      }
+    } catch (error) {
+      console.error('Error checking user:', error)
+      router.push('/login')
+    } finally {
+      setLoading(false
+      )
+    }
   }
 
-  const totalAvailableEarnings = availableTasks.reduce((sum, task) => sum + task.reward, 0)
+  const checkParentSession = async () => {
+    try {
+      if (!user) return
 
-  const notifications = [
-    { id: 1, type: "approval", message: "Math homework approved!", reward: 8.0, time: "5 min ago", read: false },
-    { id: 2, type: "reminder", message: "Take out trash due tonight", time: "1 hour ago", read: false },
-    { id: 3, type: "bonus", message: "Bonus task available: Clean garage", reward: 15.0, time: "2 hours ago", read: true },
-    { id: 4, type: "payment", message: "Payment received: $22.50", time: "Yesterday", read: true },
-    { id: 5, type: "streak", message: "5-day streak achieved! 🔥", time: "2 days ago", read: true },
-  ]
+      const { data: session, error } = await supabase
+        .from('parent_sessions')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('is_active', true)
+        .gt('expires_at', new Date().toISOString())
+        .single()
 
+      if (session && !error) {
+        setIsParentMode(true)
+        setParentSession(session)
+        if (!kids.length) {
+          await loadFamilyData(user.id)
+        }
+      } else {
+        // Session expired or doesn't exist
+        if (isParentMode) {
+          setIsParentMode(false)
+          setParentSession(null)
+          await loadKidsAndSelectDefault(user.id)
+        }
+      }
+    } catch (error) {
+      console.error('Error checking parent session:', error)
+      if (isParentMode) {
+        setIsParentMode(false)
+        setParentSession(null)
+      }
+    }
+  }
+
+  const loadKidsAndSelectDefault = async (userId) => {
+    try {
+      const { data: family } = await supabase
+        .from('families')
+        .select('*')
+        .eq('parent_id', userId)
+        .single()
+
+      if (family) {
+        const { data: familyKids } = await supabase
+          .from('kids')
+          .select('*')
+          .eq('family_id', family.id)
+          .order('created_at', { ascending: true })
+
+        setKids(familyKids || [])
+
+        const lastSelectedKid = localStorage.getItem('selectedKidId')
+        const kidToSelect = familyKids?.find(k => k.id === lastSelectedKid) || familyKids?.[0]
+        
+        if (kidToSelect) {
+          setSelectedKid(kidToSelect)
+          await loadKidData(kidToSelect.id)
+        }
+      }
+    } catch (error) {
+      console.error('Error loading kids:', error)
+    }
+  }
+
+  const loadFamilyData = async (userId) => {
+    try {
+      const { data: family } = await supabase
+        .from('families')
+        .select('*')
+        .eq('parent_id', userId)
+        .single()
+
+      if (family) {
+        const { data: familyKids } = await supabase
+          .from('kids')
+          .select('*')
+          .eq('family_id', family.id)
+
+        setKids(familyKids || [])
+        await loadAllFamilyTasks(family.id)
+      }
+    } catch (error) {
+      console.error('Error loading family data:', error)
+    }
+  }
+
+  const loadKidData = async (kidId) => {
+    try {
+      localStorage.setItem('selectedKidId', kidId)
+      
+      const { data: kidTasks } = await supabase
+        .from('tasks')
+        .select('*')
+        .eq('assigned_to', kidId)
+        .eq('status', 'available')
+
+      const { data: completedKidTasks } = await supabase
+        .from('tasks')
+        .select('*')
+        .eq('assigned_to', kidId)
+        .in('status', ['completed', 'approved'])
+        .order('completed_at', { ascending: false })
+        .limit(10)
+
+      const { data: kidGoals } = await supabase
+        .from('goals')
+        .select('*')
+        .eq('kid_id', kidId)
+
+      setTasks(kidTasks || [])
+      setCompletedTasks(completedKidTasks || [])
+      setGoals(kidGoals || [])
+      
+      calculateKidStats(kidTasks, completedKidTasks)
+    } catch (error) {
+      console.error('Error loading kid data:', error)
+    }
+  }
+
+  const loadAllFamilyTasks = async (familyId) => {
+    try {
+      const { data: allTasks } = await supabase
+        .from('tasks')
+        .select(`
+          *,
+          kids(name)
+        `)
+        .eq('family_id', familyId)
+
+      const availableTasks = allTasks?.filter(task => task.status === 'available') || []
+      const completed = allTasks?.filter(task => ['completed', 'approved'].includes(task.status)) || []
+      
+      setTasks(availableTasks)
+      setCompletedTasks(completed)
+      
+      calculateFamilyStats(allTasks)
+    } catch (error) {
+      console.error('Error loading family tasks:', error)
+    }
+  }
+
+  const calculateKidStats = (availableTasks, completedTasks) => {
+    const totalEarned = completedTasks
+      ?.filter(task => task.status === 'approved')
+      ?.reduce((sum, task) => sum + task.reward, 0) || 0
+
+    const pendingEarnings = completedTasks
+      ?.filter(task => task.status === 'completed')
+      ?.reduce((sum, task) => sum + task.reward, 0) || 0
+
+    setStats({
+      totalEarned,
+      pendingEarnings,
+      weeklyStats: {
+        tasksCompleted: completedTasks?.length || 0,
+        earned: totalEarned,
+        completionRate: 85, // Calc based on assigned vs completed
+        currentStreak: 5, // Calc based on consecutive days
+      }
+    })
+  }
+
+  const calculateFamilyStats = (allTasks) => {
+    const totalEarned = allTasks
+      ?.filter(task => task.status === 'approved')
+      ?.reduce((sum, task) => sum + task.reward, 0) || 0
+
+    const pendingEarnings = allTasks
+      ?.filter(task => task.status === 'completed')
+      ?.reduce((sum, task) => sum + task.reward, 0) || 0
+
+    setStats({
+      totalEarned,
+      pendingEarnings,
+      weeklyStats: {
+        tasksCompleted: allTasks?.filter(task => task.status === 'completed').length || 0,
+        earned: totalEarned,
+        completionRate: 85,
+        currentStreak: 5,
+      }
+    })
+  }
+
+  const handleParentPinSubmit = async (e) => {
+    e.preventDefault()
+    try {
+      const { data: family } = await supabase
+        .from('families')
+        .select('parent_pin')
+        .eq('parent_id', user.id)
+        .single()
+
+      if (family && family.parent_pin === parentPin) {
+        const sessionExpiry = new Date()
+        sessionExpiry.setMinutes(sessionExpiry.getMinutes() + 30) // 30 min
+
+        await supabase
+          .from('parent_sessions')
+          .update({ is_active: false })
+          .eq('user_id', user.id)
+
+        // Create new sesh
+        const { data: newSession, error } = await supabase
+          .from('parent_sessions')
+          .insert({
+            user_id: user.id,
+            expires_at: sessionExpiry.toISOString(),
+            is_active: true,
+            created_at: new Date().toISOString()
+          })
+          .select()
+          .single()
+
+        if (error) throw error
+
+        setIsParentMode(true)
+        setParentSession(newSession)
+        setShowParentPinModal(false)
+        setParentPin("")
+        await loadFamilyData(user.id)
+      } else {
+        alert('Invalid parent PIN')
+      }
+    } catch (error) {
+      console.error('Parent PIN verification failed:', error)
+      alert('Invalid parent PIN')
+    }
+  }
+
+  const switchToKidMode = async () => {
+    try {
+      // Invalidate parent session
+      if (parentSession) {
+        await supabase
+          .from('parent_sessions')
+          .update({ is_active: false })
+          .eq('id', parentSession.id)
+      }
+
+      setIsParentMode(false)
+      setParentSession(null)
+      
+      if (selectedKid) {
+        loadKidData(selectedKid.id)
+      } else if (kids.length > 0) {
+        setSelectedKid(kids[0])
+        loadKidData(kids[0].id)
+      }
+    } catch (error) {
+      console.error('Error switching to kid mode:', error)
+    }
+  }
+
+  const handleKidSelection = async (kid) => {
+    setSelectedKid(kid)
+    await loadKidData(kid.id)
+  }
+
+  const handleSignOut = async () => {
+    try {
+      // Invalidate parent session if exists
+      if (parentSession) {
+        await supabase
+          .from('parent_sessions')
+          .update({ is_active: false })
+          .eq('id', parentSession.id)
+      }
+      
+      await supabase.auth.signOut()
+      localStorage.removeItem('selectedKidId')
+      router.push('/login')
+    } catch (error) {
+      console.error('Error signing out:', error)
+    }
+  }
+
+  // Add session timeout warning
+  const getSessionTimeRemaining = () => {
+    if (!parentSession) return 0
+    const now = new Date().getTime()
+    const expires = new Date(parentSession.expires_at).getTime()
+    return Math.max(0, expires - now)
+  }
+
+  const sessionTimeRemaining = getSessionTimeRemaining()
+  const showSessionWarning = isParentMode && sessionTimeRemaining > 0 && sessionTimeRemaining < 5 * 60 * 1000 // 5 minutes
+
+  const totalAvailableEarnings = tasks.reduce((sum, task) => sum + task.reward, 0)
   const unreadCount = notifications.filter(n => !n.read).length
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-2xl font-medium text-gray-900 mb-2">Nerlo</div>
+          <div className="text-sm text-gray-500">Loading...</div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {showSessionWarning && (
+        <div className="bg-yellow-50 border-b border-yellow-200 px-4 py-2">
+          <div className="max-w-5xl mx-auto">
+            <p className="text-sm text-yellow-800">
+              Parent session expires in {Math.ceil(sessionTimeRemaining / 60000)} minutes. 
+              <button 
+                onClick={() => setShowParentPinModal(true)}
+                className="ml-2 underline hover:no-underline"
+              >
+                Extend session
+              </button>
+            </p>
+          </div>
+        </div>
+      )}
+
       <header className="bg-white border-b border-gray-100">
         <div className="max-w-5xl mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             <Link href="/">
-            <h1 className="text-xl font-medium text-gray-900">Nerlo</h1>
+              <h1 className="text-xl font-medium text-gray-900">Nerlo</h1>
             </Link>
             <div className="flex items-center gap-4">
+              {!isParentMode && kids.length > 1 && (
+                <select
+                  value={selectedKid?.id || ''}
+                  onChange={(e) => {
+                    const kid = kids.find(k => k.id === e.target.value)
+                    if (kid) handleKidSelection(kid)
+                  }}
+                  className="text-sm border border-gray-300 rounded-lg px-3 py-1 focus:outline-none focus:ring-2 focus:ring-gray-900"
+                >
+                  {kids.map(kid => (
+                    <option key={kid.id} value={kid.id}>{kid.name}</option>
+                  ))}
+                </select>
+              )}
+
+              {isParentMode ? (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded flex items-center gap-1">
+                    <Settings className="w-3 h-3" />
+                    Parent Mode
+                    {sessionTimeRemaining > 0 && (
+                      <span className="text-xs opacity-75">
+                        ({Math.ceil(sessionTimeRemaining / 60000)}m)
+                      </span>
+                    )}
+                  </span>
+                  <button
+                    onClick={switchToKidMode}
+                    className="text-xs text-gray-500 hover:text-gray-700"
+                  >
+                    Exit Parent Mode
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  {selectedKid && (
+                    <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">
+                      {selectedKid.name}
+                    </span>
+                  )}
+                  <button
+                    onClick={() => setShowParentPinModal(true)}
+                    className="text-xs bg-gray-100 text-gray-700 px-3 py-1 rounded hover:bg-gray-200 flex items-center gap-1"
+                  >
+                    <Settings className="w-3 h-3" />
+                    Parent
+                  </button>
+                </div>
+              )}
+              
               <div className="flex items-center gap-2 text-sm">
                 <span className="text-gray-500">Pending:</span>
-                <span className="font-medium text-orange-600">${pendingEarnings.toFixed(2)}</span>
+                <span className="font-medium text-orange-600">${stats.pendingEarnings.toFixed(2)}</span>
               </div>
+              
               <div className="relative">
                 <button 
                   onClick={() => setShowNotifications(!showNotifications)}
@@ -131,28 +529,95 @@ export default function Dash() {
                   </div>
                 )}
               </div>
-              <div className="w-8 h-8 bg-gray-900 rounded-full flex items-center justify-center">
-                <User className="text-gray-50"></User>
+              
+              <div className="relative">
+                <button
+                  onClick={() => setShowUserMenu(!showUserMenu)}
+                  className="w-8 h-8 bg-gray-900 rounded-full flex items-center justify-center hover:bg-gray-800 transition-colors"
+                >
+                  <User className="text-gray-50 w-4 h-4" />
+                </button>
+                
+                {showUserMenu && (
+                  <div className="absolute right-0 top-10 w-48 bg-white rounded-lg shadow-lg border border-gray-100 z-50">
+                    <div className="p-2">
+                      <button
+                        onClick={handleSignOut}
+                        className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg"
+                      >
+                        <LogOut className="w-4 h-4" />
+                        Sign out
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
         </div>
       </header>
 
+      {showParentPinModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg shadow-lg w-80">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">
+              {isParentMode ? 'Extend Parent Session' : 'Parent Access'}
+            </h3>
+            <p className="text-sm text-gray-600 mb-4">
+              {isParentMode 
+                ? 'Enter your PIN to extend the parent session for another 30 minutes'
+                : 'Enter the parent PIN to access family management'
+              }
+            </p>
+            <form onSubmit={handleParentPinSubmit}>
+              <input
+                type="password"
+                value={parentPin}
+                onChange={(e) => setParentPin(e.target.value)}
+                className="placeholder-gray-400 text-gray-900 w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent mb-4"
+                placeholder="Enter parent PIN"
+                maxLength={6}
+                autoFocus
+              />
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowParentPinModal(false)
+                    setParentPin("")
+                  }}
+                  className="flex-1 px-4 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800"
+                >
+                  {isParentMode ? 'Extend' : 'Access'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       <main className="max-w-5xl mx-auto px-6 py-8">
         <div className="mb-12">
           <div className="text-center">
-            <div className="text-4xl font-light text-gray-900 mb-2">${totalEarned.toFixed(2)}</div>
-            <div className="text-sm text-gray-500">Your earnings</div>
+            <div className="text-4xl font-light text-gray-900 mb-2">${stats.totalEarned.toFixed(2)}</div>
+            <div className="text-sm text-gray-500">
+              {isParentMode ? 'Family earnings' : `${selectedKid?.name || 'Your'} earnings`}
+            </div>
             <div className="text-xs text-gray-400 mt-1">${totalAvailableEarnings.toFixed(2)} available to earn</div>
             <div className="flex items-center justify-center gap-4 mt-4">
               <div className="flex items-center gap-1 text-xs text-gray-500">
                 <Flame className="w-3 h-3 text-orange-400" fill="currentColor" />
-                <span>{weeklyStats.currentStreak} day streak</span>
+                <span>{stats.weeklyStats.currentStreak} day streak</span>
               </div>
               <div className="flex items-center gap-1 text-xs text-gray-500">
                 <Star className="w-3 h-3 text-yellow-500" fill="currentColor" />
-                <span>{weeklyStats.completionRate}% completion</span>
+                <span>{stats.weeklyStats.completionRate}% completion</span>
               </div>
             </div>
           </div>
@@ -162,11 +627,11 @@ export default function Dash() {
           <div className="lg:col-span-2">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-lg font-medium text-gray-900">Available tasks</h2>
-              <div className="text-sm text-gray-500">{availableTasks.length} tasks</div>
+              <div className="text-sm text-gray-500">{tasks.length} tasks</div>
             </div>
 
             <div className="space-y-3">
-              {availableTasks.map((task) => (
+              {tasks.map((task) => (
                 <div
                   key={task.id}
                   className={`bg-white p-4 rounded-lg border transition-colors group cursor-pointer ${
@@ -186,7 +651,7 @@ export default function Dash() {
                           <span>{task.deadline}</span>
                         </div>
                         <div className="flex items-center gap-1">
-                          <span className="text-xs">{task.timeEstimate}</span>
+                          <span className="text-xs">{task.time_estimate}</span>
                           <span className="text-xs">•</span>
                           <span className="text-xs">{task.difficulty}</span>
                         </div>
@@ -254,23 +719,23 @@ export default function Dash() {
               <div className="space-y-3">
                 <div className="flex justify-between items-center">
                   <span className="text-sm text-gray-500">Tasks completed</span>
-                  <span className="font-medium text-gray-900">{weeklyStats.tasksCompleted}</span>
+                  <span className="font-medium text-gray-900">{stats.weeklyStats.tasksCompleted}</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-sm text-gray-500">Earned</span>
-                  <span className="font-medium text-gray-900">${weeklyStats.earned.toFixed(2)}</span>
+                  <span className="font-medium text-gray-900">${stats.weeklyStats.earned.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-sm text-gray-500">Completion rate</span>
                   <div className="flex items-center gap-2">
-                    <span className="font-medium text-gray-900">{weeklyStats.completionRate}%</span>
+                    <span className="font-medium text-gray-900">{stats.weeklyStats.completionRate}%</span>
                     <Star className="w-4 h-4 text-yellow-500" />
                   </div>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-sm text-gray-500">Current streak</span>
                   <div className="flex items-center gap-2">
-                    <span className="font-medium text-gray-900">{weeklyStats.currentStreak} days</span>
+                    <span className="font-medium text-gray-900">{stats.weeklyStats.currentStreak} days</span>
                     <Flame className="w-4 h-4 text-orange-400" fill="currentColor" />
                   </div>
                 </div>
