@@ -20,11 +20,23 @@ export default function Login() {
     setError("")
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { error, data } = await supabase.auth.signInWithPassword({
         email,
         password,
       })
       if (error) throw error
+      
+      const { data: family } = await supabase
+        .from('families')
+        .select('id')
+        .eq('parent_id', data.user.id)
+        .single()
+
+      if (family) {
+        window.location.href = '/'
+      } else {
+        window.location.href = '/onboarding'
+      }
     } catch (error: any) {
       setError(error.message)
     } finally {
@@ -38,7 +50,7 @@ export default function Login() {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${window.location.origin}/`
+          redirectTo: `${window.location.origin}/auth/callback`
         }
       })
       if (error) throw error
@@ -79,7 +91,7 @@ export default function Login() {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+                className="text-gray-900 placeholder-slate-400 w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
                 placeholder="Enter your email"
               />
             </div>
@@ -95,7 +107,7 @@ export default function Login() {
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+                  className="text-gray-900 placeholder-slate-400 w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
                   placeholder="Enter your password"
                 />
                 <button
