@@ -3,11 +3,50 @@ import { CheckCircle2, Clock, DollarSign, Star, ArrowRight, Users } from 'lucide
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 
+interface Stats {
+  families: string;
+  tasksCompleted: string;
+  totalEarned: string;
+  lastUpdated: number;
+  nextUpdate: number;
+}
+
 export default function Landing() {
   const [isVisible, setIsVisible] = useState(false);
+  const [stats, setStats] = useState<Stats>({
+    families: '1+',
+    tasksCompleted: '1+',
+    totalEarned: '$5+',
+    lastUpdated: Date.now(),
+    nextUpdate: 30000
+  });
+  const [isLoading, setIsLoading] = useState(false);
+
+  const fetchStats = async () => {
+    if (isLoading) return;
+    
+    setIsLoading(true);
+    try {
+      const response = await fetch('/api/stats');
+      if (response.ok) {
+        const newStats = await response.json();
+        setStats(newStats);
+      }
+    } catch (error) {
+      console.error('Failed to fetch stats:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   useEffect(() => {
     setIsVisible(true);
+    fetchStats();
+
+    // Set up periodic updates
+    const interval = setInterval(fetchStats, 35000); // Fetch every 35 seconds
+    
+    return () => clearInterval(interval);
   }, []);
 
   return (
@@ -44,17 +83,33 @@ export default function Landing() {
         </div>
 
         <div className={`grid grid-cols-3 gap-16 text-center py-24 border-t border-gray-100 transform transition-all duration-1000 delay-300 ${isVisible ? 'translate-y-0 opacity-100' : 'translate-y-12 opacity-0'}`}>
-          <div className="hover:scale-105 transition-transform duration-300">
-            <div className="text-5xl font-extralight text-gray-900 mb-4 tracking-tight">1+</div>
+          <div className="hover:scale-105 transition-transform duration-300 group">
+            <div className={`text-5xl font-extralight text-gray-900 mb-4 tracking-tight transition-all duration-500 ${isLoading ? 'opacity-50' : 'opacity-100'}`}>
+              {stats.families}
+            </div>
             <div className="text-base text-gray-500 font-medium">Families using Nerlo</div>
+            {isLoading && <div className="w-2 h-2 bg-green-500 rounded-full mx-auto mt-2 animate-pulse"></div>}
           </div>
-          <div className="hover:scale-105 transition-transform duration-300">
-            <div className="text-5xl font-extralight text-gray-900 mb-4 tracking-tight">1+</div>
+          <div className="hover:scale-105 transition-transform duration-300 group">
+            <div className={`text-5xl font-extralight text-gray-900 mb-4 tracking-tight transition-all duration-500 ${isLoading ? 'opacity-50' : 'opacity-100'}`}>
+              {stats.tasksCompleted}
+            </div>
             <div className="text-base text-gray-500 font-medium">Tasks completed</div>
+            {isLoading && <div className="w-2 h-2 bg-blue-500 rounded-full mx-auto mt-2 animate-pulse"></div>}
           </div>
-          <div className="hover:scale-105 transition-transform duration-300">
-            <div className="text-5xl font-extralight text-gray-900 mb-4 tracking-tight">$5+</div>
+          <div className="hover:scale-105 transition-transform duration-300 group">
+            <div className={`text-5xl font-extralight text-gray-900 mb-4 tracking-tight transition-all duration-500 ${isLoading ? 'opacity-50' : 'opacity-100'}`}>
+              {stats.totalEarned}
+            </div>
             <div className="text-base text-gray-500 font-medium">Earned by kids</div>
+            {isLoading && <div className="w-2 h-2 bg-yellow-500 rounded-full mx-auto mt-2 animate-pulse"></div>}
+          </div>
+        </div>
+
+        <div className="text-center mt-8">
+          <div className="inline-flex items-center gap-2 text-sm text-gray-500">
+            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+            Live statistics
           </div>
         </div>
       </section>

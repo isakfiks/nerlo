@@ -914,11 +914,11 @@ export default function Dash() {
                       <div className="flex-1">
                         <h3 className="text-gray-900 mb-2">{task.title}</h3>
                         <div className="flex items-center gap-4 text-sm text-gray-500">
-                          <span>{task.category}</span>
+                          <span>{task.category.charAt(0).toUpperCase() + task.category.slice(1)}</span>
                           <span>•</span>
                           <span>{task.time_estimate}</span>
                           <span>•</span>
-                          <span>{task.difficulty}</span>
+                          <span>{task.difficulty.charAt(0).toUpperCase() + task.difficulty.slice(1)}</span>
                           {task.urgent && (
                             <>
                               <span>•</span>
