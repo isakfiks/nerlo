@@ -1,9 +1,9 @@
 "use client";
-import { Bell, CheckCircle2, Clock, DollarSign, Star, MoreHorizontal, User, Flame, LogOut, Settings } from "lucide-react"
-import { useState, useEffect } from "react"
-import Link from "next/link";
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
-import { useRouter } from "next/navigation"
+import { Bell, CheckCircle2, Clock, DollarSign, Star, MoreHorizontal, User, Flame, LogOut, Settings, Plus, Edit3 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import Link from 'next/link';
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { useRouter } from 'next/navigation';
 
 export default function Dash() {
   const [showNotifications, setShowNotifications] = useState(false)
@@ -16,11 +16,23 @@ export default function Dash() {
   const [kids, setKids] = useState([])
   const [loading, setLoading] = useState(true)
   const [parentSession, setParentSession] = useState(null)
-  
-  const [tasks, setTasks] = useState([])
-  const [completedTasks, setCompletedTasks] = useState([])
-  const [goals, setGoals] = useState([])
-  const [notifications, setNotifications] = useState([])
+
+  const [showCreateTaskModal, setShowCreateTaskModal] = useState(false)
+  const [newTask, setNewTask] = useState({
+    title: "",
+    description: "",
+    category: "chores",
+    reward: "",
+    deadline: "",
+    time_estimate: "30 min",
+    difficulty: "easy",
+    assigned_to: "",
+  });
+
+  const [tasks, setTasks] = useState([]);
+  const [completedTasks, setCompletedTasks] = useState([]);
+  const [goals, setGoals] = useState([]);
+  const [notifications, setNotifications] = useState([]);
   const [stats, setStats] = useState({
     totalEarned: 0,
     pendingEarnings: 0,
@@ -29,58 +41,55 @@ export default function Dash() {
       earned: 0,
       completionRate: 0,
       currentStreak: 0,
-    }
-  })
+    },
+  });
 
-  const supabase = createClientComponentClient()
-  const router = useRouter()
+  const supabase = createClientComponentClient();
+  const router = useRouter();
 
   useEffect(() => {
-    checkUser()
-    const interval = setInterval(checkParentSession, 30000)
-    return () => clearInterval(interval)
-  }, [])
+    checkUser();
+    const interval = setInterval(checkParentSession, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   const checkUser = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) {
-        router.push('/login')
-        return
+        router.push('/login');
+        return;
       }
-      
-      setUser(user)
-      
+
+      setUser(user);
+
       // Check for completed onboarding
-      const { data: family } = await supabase
-        .from('families')
-        .select('*')
-        .eq('parent_id', user.id)
-        .single()
+      const { data: family } = await supabase.from('families').select('*').eq('parent_id', user.id).single();
 
       if (!family) {
         // No family  found.. redirect
-        router.push('/onboarding')
-        return
+        router.push('/onboarding');
+        return;
       }
-      
-      await checkParentSession()
-      
+
+      await checkParentSession();
+
       if (!isParentMode) {
-        await loadKidsAndSelectDefault(user.id)
+        await loadKidsAndSelectDefault(user.id);
       }
     } catch (error) {
-      console.error('Error checking user:', error)
-      router.push('/login')
+      console.error('Error checking user:', error);
+      router.push('/login');
     } finally {
-      setLoading(false
-      )
+      setLoading(false);
     }
-  }
+  };
 
   const checkParentSession = async () => {
     try {
-      if (!user) return
+      if (!user) return;
 
       const { data: session, error } = await supabase
         .from('parent_sessions')
@@ -88,92 +97,81 @@ export default function Dash() {
         .eq('user_id', user.id)
         .eq('is_active', true)
         .gt('expires_at', new Date().toISOString())
-        .single()
+        .single();
 
       if (session && !error) {
-        setIsParentMode(true)
-        setParentSession(session)
+        setIsParentMode(true);
+        setParentSession(session);
         if (!kids.length) {
-          await loadFamilyData(user.id)
+          await loadFamilyData(user.id);
         }
       } else {
         // Session expired or doesn't exist
         if (isParentMode) {
-          setIsParentMode(false)
-          setParentSession(null)
-          await loadKidsAndSelectDefault(user.id)
+          setIsParentMode(false);
+          setParentSession(null);
+          await loadKidsAndSelectDefault(user.id);
         }
       }
     } catch (error) {
-      console.error('Error checking parent session:', error)
+      console.error('Error checking parent session:', error);
       if (isParentMode) {
-        setIsParentMode(false)
-        setParentSession(null)
+        setIsParentMode(false);
+        setParentSession(null);
       }
     }
-  }
+  };
 
   const loadKidsAndSelectDefault = async (userId) => {
     try {
-      const { data: family } = await supabase
-        .from('families')
-        .select('*')
-        .eq('parent_id', userId)
-        .single()
+      const { data: family } = await supabase.from('families').select('*').eq('parent_id', userId).single();
 
       if (family) {
         const { data: familyKids } = await supabase
           .from('kids')
           .select('*')
           .eq('family_id', family.id)
-          .order('created_at', { ascending: true })
+          .order('created_at', { ascending: true });
 
-        setKids(familyKids || [])
+        setKids(familyKids || []);
 
-        const lastSelectedKid = localStorage.getItem('selectedKidId')
-        const kidToSelect = familyKids?.find(k => k.id === lastSelectedKid) || familyKids?.[0]
-        
+        const lastSelectedKid = localStorage.getItem('selectedKidId');
+        const kidToSelect = familyKids?.find((k) => k.id === lastSelectedKid) || familyKids?.[0];
+
         if (kidToSelect) {
-          setSelectedKid(kidToSelect)
-          await loadKidData(kidToSelect.id)
+          setSelectedKid(kidToSelect);
+          await loadKidData(kidToSelect.id);
         }
       }
     } catch (error) {
-      console.error('Error loading kids:', error)
+      console.error('Error loading kids:', error);
     }
-  }
+  };
 
   const loadFamilyData = async (userId) => {
     try {
-      const { data: family } = await supabase
-        .from('families')
-        .select('*')
-        .eq('parent_id', userId)
-        .single()
+      const { data: family } = await supabase.from('families').select('*').eq('parent_id', userId).single();
 
       if (family) {
-        const { data: familyKids } = await supabase
-          .from('kids')
-          .select('*')
-          .eq('family_id', family.id)
+        const { data: familyKids } = await supabase.from('kids').select('*').eq('family_id', family.id);
 
-        setKids(familyKids || [])
-        await loadAllFamilyTasks(family.id)
+        setKids(familyKids || []);
+        await loadAllFamilyTasks(family.id);
       }
     } catch (error) {
-      console.error('Error loading family data:', error)
+      console.error('Error loading family data:', error);
     }
-  }
+  };
 
   const loadKidData = async (kidId) => {
     try {
-      localStorage.setItem('selectedKidId', kidId)
-      
+      localStorage.setItem('selectedKidId', kidId);
+
       const { data: kidTasks } = await supabase
         .from('tasks')
         .select('*')
         .eq('assigned_to', kidId)
-        .eq('status', 'available')
+        .eq('status', 'available');
 
       const { data: completedKidTasks } = await supabase
         .from('tasks')
@@ -181,22 +179,19 @@ export default function Dash() {
         .eq('assigned_to', kidId)
         .in('status', ['completed', 'approved'])
         .order('completed_at', { ascending: false })
-        .limit(10)
+        .limit(10);
 
-      const { data: kidGoals } = await supabase
-        .from('goals')
-        .select('*')
-        .eq('kid_id', kidId)
+      const { data: kidGoals } = await supabase.from('goals').select('*').eq('kid_id', kidId);
 
-      setTasks(kidTasks || [])
-      setCompletedTasks(completedKidTasks || [])
-      setGoals(kidGoals || [])
-      
-      calculateKidStats(kidTasks, completedKidTasks)
+      setTasks(kidTasks || []);
+      setCompletedTasks(completedKidTasks || []);
+      setGoals(kidGoals || []);
+
+      calculateKidStats(kidTasks, completedKidTasks);
     } catch (error) {
-      console.error('Error loading kid data:', error)
+      console.error('Error loading kid data:', error);
     }
-  }
+  };
 
   const loadAllFamilyTasks = async (familyId) => {
     try {
@@ -206,28 +201,26 @@ export default function Dash() {
           *,
           kids(name)
         `)
-        .eq('family_id', familyId)
+        .eq('family_id', familyId);
 
-      const availableTasks = allTasks?.filter(task => task.status === 'available') || []
-      const completed = allTasks?.filter(task => ['completed', 'approved'].includes(task.status)) || []
-      
-      setTasks(availableTasks)
-      setCompletedTasks(completed)
-      
-      calculateFamilyStats(allTasks)
+      const availableTasks = allTasks?.filter((task) => task.status === 'available') || [];
+      const completed = allTasks?.filter((task) => ['completed', 'approved'].includes(task.status)) || [];
+
+      setTasks(availableTasks);
+      setCompletedTasks(completed);
+
+      calculateFamilyStats(allTasks);
     } catch (error) {
-      console.error('Error loading family tasks:', error)
+      console.error('Error loading family tasks:', error);
     }
-  }
+  };
 
   const calculateKidStats = (availableTasks, completedTasks) => {
-    const totalEarned = completedTasks
-      ?.filter(task => task.status === 'approved')
-      ?.reduce((sum, task) => sum + task.reward, 0) || 0
+    const totalEarned =
+      completedTasks?.filter((task) => task.status === 'approved')?.reduce((sum, task) => sum + task.reward, 0) || 0;
 
-    const pendingEarnings = completedTasks
-      ?.filter(task => task.status === 'completed')
-      ?.reduce((sum, task) => sum + task.reward, 0) || 0
+    const pendingEarnings =
+      completedTasks?.filter((task) => task.status === 'completed')?.reduce((sum, task) => sum + task.reward, 0) || 0;
 
     setStats({
       totalEarned,
@@ -237,48 +230,81 @@ export default function Dash() {
         earned: totalEarned,
         completionRate: 85, // Calc based on assigned vs completed
         currentStreak: 5, // Calc based on consecutive days
-      }
-    })
-  }
+      },
+    });
+  };
 
   const calculateFamilyStats = (allTasks) => {
-    const totalEarned = allTasks
-      ?.filter(task => task.status === 'approved')
-      ?.reduce((sum, task) => sum + task.reward, 0) || 0
+    const totalEarned =
+      allTasks?.filter((task) => task.status === 'approved')?.reduce((sum, task) => sum + task.reward, 0) || 0;
 
-    const pendingEarnings = allTasks
-      ?.filter(task => task.status === 'completed')
-      ?.reduce((sum, task) => sum + task.reward, 0) || 0
+    const pendingEarnings =
+      allTasks?.filter((task) => task.status === 'completed')?.reduce((sum, task) => sum + task.reward, 0) || 0;
 
     setStats({
       totalEarned,
       pendingEarnings,
       weeklyStats: {
-        tasksCompleted: allTasks?.filter(task => task.status === 'completed').length || 0,
+        tasksCompleted: allTasks?.filter((task) => task.status === 'completed').length || 0,
         earned: totalEarned,
         completionRate: 85,
         currentStreak: 5,
-      }
-    })
-  }
+      },
+    });
+  };
+
+  // New function to handle task creation
+  const handleCreateTask = async (e) => {
+    e.preventDefault();
+    try {
+      const { data: family } = await supabase.from('families').select('id').eq('parent_id', user.id).single();
+
+      if (!family) return;
+
+      const taskData = {
+        ...newTask,
+        reward: Number.parseFloat(newTask.reward),
+        family_id: family.id,
+        status: 'available',
+        created_at: new Date().toISOString(),
+        assigned_to: newTask.assigned_to || null, // Convert empty string to null
+      };
+
+      const { error } = await supabase.from('tasks').insert(taskData);
+
+      if (error) throw error;
+
+      // Reset form and close modal
+      setNewTask({
+        title: "",
+        description: "",
+        category: "chores",
+        reward: "",
+        deadline: "",
+        time_estimate: "30 min",
+        difficulty: "easy",
+        assigned_to: "",
+      });
+      setShowCreateTaskModal(false);
+
+      // Reload tasks
+      await loadAllFamilyTasks(family.id);
+    } catch (error) {
+      console.error('Error creating task:', error);
+      alert('Failed to create task');
+    }
+  };
 
   const handleParentPinSubmit = async (e) => {
-    e.preventDefault()
+    e.preventDefault();
     try {
-      const { data: family } = await supabase
-        .from('families')
-        .select('parent_pin')
-        .eq('parent_id', user.id)
-        .single()
+      const { data: family } = await supabase.from('families').select('parent_pin').eq('parent_id', user.id).single();
 
       if (family && family.parent_pin === parentPin) {
-        const sessionExpiry = new Date()
-        sessionExpiry.setMinutes(sessionExpiry.getMinutes() + 30) // 30 min
+        const sessionExpiry = new Date();
+        sessionExpiry.setMinutes(sessionExpiry.getMinutes() + 30); // 30 min
 
-        await supabase
-          .from('parent_sessions')
-          .update({ is_active: false })
-          .eq('user_id', user.id)
+        await supabase.from('parent_sessions').update({ is_active: false }).eq('user_id', user.id);
 
         // Create new sesh
         const { data: newSession, error } = await supabase
@@ -287,87 +313,81 @@ export default function Dash() {
             user_id: user.id,
             expires_at: sessionExpiry.toISOString(),
             is_active: true,
-            created_at: new Date().toISOString()
+            created_at: new Date().toISOString(),
           })
           .select()
-          .single()
+          .single();
 
-        if (error) throw error
+        if (error) throw error;
 
-        setIsParentMode(true)
-        setParentSession(newSession)
-        setShowParentPinModal(false)
-        setParentPin("")
-        await loadFamilyData(user.id)
+        setIsParentMode(true);
+        setParentSession(newSession);
+        setShowParentPinModal(false);
+        setParentPin("");
+        await loadFamilyData(user.id);
       } else {
-        alert('Invalid parent PIN')
+        alert('Invalid parent PIN');
       }
     } catch (error) {
-      console.error('Parent PIN verification failed:', error)
-      alert('Invalid parent PIN')
+      console.error('Parent PIN verification failed:', error);
+      alert('Invalid parent PIN');
     }
-  }
+  };
 
   const switchToKidMode = async () => {
     try {
       // Invalidate parent session
       if (parentSession) {
-        await supabase
-          .from('parent_sessions')
-          .update({ is_active: false })
-          .eq('id', parentSession.id)
+        await supabase.from('parent_sessions').update({ is_active: false }).eq('id', parentSession.id);
       }
 
-      setIsParentMode(false)
-      setParentSession(null)
-      
+      setIsParentMode(false);
+      setParentSession(null);
+
       if (selectedKid) {
-        loadKidData(selectedKid.id)
+        loadKidData(selectedKid.id);
       } else if (kids.length > 0) {
-        setSelectedKid(kids[0])
-        loadKidData(kids[0].id)
+        setSelectedKid(kids[0]);
+        loadKidData(kids[0].id);
       }
     } catch (error) {
-      console.error('Error switching to kid mode:', error)
+      console.error('Error switching to kid mode:', error);
     }
-  }
+  };
 
   const handleKidSelection = async (kid) => {
-    setSelectedKid(kid)
-    await loadKidData(kid.id)
-  }
+    setSelectedKid(kid);
+    await loadKidData(kid.id);
+  };
 
   const handleSignOut = async () => {
     try {
       // Invalidate parent session if exists
       if (parentSession) {
-        await supabase
-          .from('parent_sessions')
-          .update({ is_active: false })
-          .eq('id', parentSession.id)
+        await supabase.from('parent_sessions').update({ is_active: false }).eq('id', parentSession.id);
       }
-      
-      await supabase.auth.signOut()
-      localStorage.removeItem('selectedKidId')
-      router.push('/login')
+
+      await supabase.auth.signOut();
+      localStorage.removeItem('selectedKidId');
+      router.push('/login');
     } catch (error) {
-      console.error('Error signing out:', error)
+      console.error('Error signing out:', error);
     }
-  }
+  };
 
   // Add session timeout warning
   const getSessionTimeRemaining = () => {
-    if (!parentSession) return 0
-    const now = new Date().getTime()
-    const expires = new Date(parentSession.expires_at).getTime()
-    return Math.max(0, expires - now)
-  }
+    if (!parentSession) return 0;
+    const now = new Date().getTime();
+    const expires = new Date(parentSession.expires_at).getTime();
+    return Math.max(0, expires - now);
+  };
 
-  const sessionTimeRemaining = getSessionTimeRemaining()
-  const showSessionWarning = isParentMode && sessionTimeRemaining > 0 && sessionTimeRemaining < 5 * 60 * 1000 // 5 minutes
+  const sessionTimeRemaining = getSessionTimeRemaining();
+  const showSessionWarning = isParentMode && sessionTimeRemaining > 0 && sessionTimeRemaining < 5 * 60 * 1000; // 5 minutes
 
-  const totalAvailableEarnings = tasks.reduce((sum, task) => sum + task.reward, 0)
-  const unreadCount = notifications.filter(n => !n.read).length
+  const totalAvailableEarnings = tasks.reduce((sum, task) => sum + task.reward, 0);
+  const unreadCount = notifications.filter((n) => !n.read).length;
 
   if (loading) {
     return (
@@ -377,7 +397,7 @@ export default function Dash() {
           <div className="text-sm text-gray-500">Loading...</div>
         </div>
       </div>
-    )
+    );
   }
 
   return (
@@ -386,11 +406,8 @@ export default function Dash() {
         <div className="bg-yellow-50 border-b border-yellow-200 px-4 py-2">
           <div className="max-w-5xl mx-auto">
             <p className="text-sm text-yellow-800">
-              Parent session expires in {Math.ceil(sessionTimeRemaining / 60000)} minutes. 
-              <button 
-                onClick={() => setShowParentPinModal(true)}
-                className="ml-2 underline hover:no-underline"
-              >
+              Parent session expires in {Math.ceil(sessionTimeRemaining / 60000)} minutes.
+              <button onClick={() => setShowParentPinModal(true)} className="ml-2 underline hover:no-underline">
                 Extend session
               </button>
             </p>
@@ -407,15 +424,17 @@ export default function Dash() {
             <div className="flex items-center gap-4">
               {!isParentMode && kids.length > 1 && (
                 <select
-                  value={selectedKid?.id || ''}
+                  value={selectedKid?.id || ""}
                   onChange={(e) => {
-                    const kid = kids.find(k => k.id === e.target.value)
-                    if (kid) handleKidSelection(kid)
+                    const kid = kids.find((k) => k.id === e.target.value);
+                    if (kid) handleKidSelection(kid);
                   }}
                   className="text-sm border border-gray-300 rounded-lg px-3 py-1 focus:outline-none focus:ring-2 focus:ring-gray-900"
                 >
-                  {kids.map(kid => (
-                    <option key={kid.id} value={kid.id}>{kid.name}</option>
+                  {kids.map((kid) => (
+                    <option key={kid.id} value={kid.id}>
+                      {kid.name}
+                    </option>
                   ))}
                 </select>
               )}
@@ -426,24 +445,17 @@ export default function Dash() {
                     <Settings className="w-3 h-3" />
                     Parent Mode
                     {sessionTimeRemaining > 0 && (
-                      <span className="text-xs opacity-75">
-                        ({Math.ceil(sessionTimeRemaining / 60000)}m)
-                      </span>
+                      <span className="text-xs opacity-75">({Math.ceil(sessionTimeRemaining / 60000)}m)</span>
                     )}
                   </span>
-                  <button
-                    onClick={switchToKidMode}
-                    className="text-xs text-gray-500 hover:text-gray-700"
-                  >
+                  <button onClick={switchToKidMode} className="text-xs text-gray-500 hover:text-gray-700">
                     Exit Parent Mode
                   </button>
                 </div>
               ) : (
                 <div className="flex items-center gap-2">
                   {selectedKid && (
-                    <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">
-                      {selectedKid.name}
-                    </span>
+                    <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">{selectedKid.name}</span>
                   )}
                   <button
                     onClick={() => setShowParentPinModal(true)}
@@ -454,14 +466,14 @@ export default function Dash() {
                   </button>
                 </div>
               )}
-              
+
               <div className="flex items-center gap-2 text-sm">
                 <span className="text-gray-500">Pending:</span>
                 <span className="font-medium text-orange-600">${stats.pendingEarnings.toFixed(2)}</span>
               </div>
-              
+
               <div className="relative">
-                <button 
+                <button
                   onClick={() => setShowNotifications(!showNotifications)}
                   className="p-2 hover:bg-gray-50 rounded-lg transition-colors relative"
                 >
@@ -472,16 +484,14 @@ export default function Dash() {
                     </span>
                   )}
                 </button>
-                
+
                 {showNotifications && (
                   <div className="absolute right-0 top-12 w-80 bg-white rounded-lg shadow-lg border border-gray-100 z-50">
                     <div className="p-4 border-b border-gray-100">
                       <div className="flex items-center justify-between">
                         <h3 className="font-medium text-gray-900">Notifications</h3>
                         {unreadCount > 0 && (
-                          <button className="text-xs text-blue-600 hover:text-blue-700">
-                            Mark all read
-                          </button>
+                          <button className="text-xs text-blue-600 hover:text-blue-700">Mark all read</button>
                         )}
                       </div>
                     </div>
@@ -494,19 +504,21 @@ export default function Dash() {
                           }`}
                         >
                           <div className="flex items-start gap-3">
-                            <div className={`w-2 h-2 rounded-full mt-2 ${
-                              !notification.read ? 'bg-blue-500' : 'bg-transparent'
-                            }`} />
+                            <div
+                              className={`w-2 h-2 rounded-full mt-2 ${
+                                !notification.read ? 'bg-blue-500' : 'bg-transparent'
+                              }`}
+                            />
                             <div className="flex-1">
                               <div className="flex items-center gap-2 mb-1">
-                                {notification.type === 'approval' && <CheckCircle2 className="w-4 h-4 text-green-500" />}
-                                {notification.type === 'reminder' && <Clock className="w-4 h-4 text-orange-500" />}
-                                {notification.type === 'bonus' && <Star className="w-4 h-4 text-yellow-500" />}
-                                {notification.type === 'payment' && <DollarSign className="w-4 h-4 text-green-500" />}
-                                {notification.type === 'streak' && <Flame className="w-4 h-4 text-orange-400" />}
-                                <span className="text-sm font-medium text-gray-900">
-                                  {notification.message}
-                                </span>
+                                {notification.type === "approval" && (
+                                  <CheckCircle2 className="w-4 h-4 text-green-500" />
+                                )}
+                                {notification.type === "reminder" && <Clock className="w-4 h-4 text-orange-500" />}
+                                {notification.type === "bonus" && <Star className="w-4 h-4 text-yellow-500" />}
+                                {notification.type === "payment" && <DollarSign className="w-4 h-4 text-green-500" />}
+                                {notification.type === "streak" && <Flame className="w-4 h-4 text-orange-400" />}
+                                <span className="text-sm font-medium text-gray-900">{notification.message}</span>
                               </div>
                               <div className="flex items-center justify-between">
                                 <span className="text-xs text-gray-500">{notification.time}</span>
@@ -529,7 +541,7 @@ export default function Dash() {
                   </div>
                 )}
               </div>
-              
+
               <div className="relative">
                 <button
                   onClick={() => setShowUserMenu(!showUserMenu)}
@@ -537,7 +549,7 @@ export default function Dash() {
                 >
                   <User className="text-gray-50 w-4 h-4" />
                 </button>
-                
+
                 {showUserMenu && (
                   <div className="absolute right-0 top-10 w-48 bg-white rounded-lg shadow-lg border border-gray-100 z-50">
                     <div className="p-2">
@@ -557,17 +569,105 @@ export default function Dash() {
         </div>
       </header>
 
+      {/* Create Task Modal */}
+      {showCreateTaskModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg shadow-lg w-96 max-h-[90vh] overflow-y-auto">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">Create New Task</h3>
+            <form onSubmit={handleCreateTask} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
+                <input
+                  type="text"
+                  value={newTask.title}
+                  onChange={(e) => setNewTask({ ...newTask, title: e.target.value })}
+                  className="placeholder-gray-400 text-gray-900 w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                <textarea
+                  value={newTask.description}
+                  onChange={(e) => setNewTask({ ...newTask, description: e.target.value })}
+                  className="placeholder-gray-400 text-gray-900 w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900"
+                  rows={3}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                  <select
+                    value={newTask.category}
+                    onChange={(e) => setNewTask({ ...newTask, category: e.target.value })}
+                    className="placeholder-gray-400 text-gray-900 w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900"
+                  >
+                    <option value="chores">Chores</option>
+                    <option value="homework">Homework</option>
+                    <option value="exercise">Exercise</option>
+                    <option value="creative">Creative</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Reward ($)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={newTask.reward}
+                    onChange={(e) => setNewTask({ ...newTask, reward: e.target.value })}
+                    className="placeholder-gray-400 text-gray-900 w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Assign to</label>
+                <select
+                  value={newTask.assigned_to}
+                  onChange={(e) => setNewTask({ ...newTask, assigned_to: e.target.value })}
+                  className="placeholder-gray-400 text-gray-900 w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900"
+                >
+                  <option value="">Anyone can claim</option>
+                  {kids.map((kid) => (
+                    <option key={kid.id} value={kid.id}>
+                      {kid.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateTaskModal(false)}
+                  className="flex-1 px-4 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="flex-1 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800">
+                  Create Task
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {showParentPinModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white p-6 rounded-lg shadow-lg w-80">
             <h3 className="text-lg font-medium text-gray-900 mb-4">
-              {isParentMode ? 'Extend Parent Session' : 'Parent Access'}
+              {isParentMode ? "Extend Parent Session" : "Parent Access"}
             </h3>
             <p className="text-sm text-gray-600 mb-4">
-              {isParentMode 
-                ? 'Enter your PIN to extend the parent session for another 30 minutes'
-                : 'Enter the parent PIN to access family management'
-              }
+              {isParentMode
+                ? "Enter your PIN to extend the parent session for another 30 minutes"
+                : "Enter the parent PIN to access family management"}
             </p>
             <form onSubmit={handleParentPinSubmit}>
               <input
@@ -583,18 +683,15 @@ export default function Dash() {
                 <button
                   type="button"
                   onClick={() => {
-                    setShowParentPinModal(false)
-                    setParentPin("")
+                    setShowParentPinModal(false);
+                    setParentPin("");
                   }}
                   className="flex-1 px-4 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50"
                 >
                   Cancel
                 </button>
-                <button
-                  type="submit"
-                  className="flex-1 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800"
-                >
-                  {isParentMode ? 'Extend' : 'Access'}
+                <button type="submit" className="flex-1 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800">
+                  {isParentMode ? "Extend" : "Access"}
                 </button>
               </div>
             </form>
@@ -607,7 +704,7 @@ export default function Dash() {
           <div className="text-center">
             <div className="text-4xl font-light text-gray-900 mb-2">${stats.totalEarned.toFixed(2)}</div>
             <div className="text-sm text-gray-500">
-              {isParentMode ? 'Family earnings' : `${selectedKid?.name || 'Your'} earnings`}
+              {isParentMode ? "Family earnings" : `${selectedKid?.name || "Your"} earnings`}
             </div>
             <div className="text-xs text-gray-400 mt-1">${totalAvailableEarnings.toFixed(2)} available to earn</div>
             <div className="flex items-center justify-center gap-4 mt-4">
@@ -626,8 +723,19 @@ export default function Dash() {
         <div className="grid lg:grid-cols-3 gap-12">
           <div className="lg:col-span-2">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-medium text-gray-900">Available tasks</h2>
-              <div className="text-sm text-gray-500">{tasks.length} tasks</div>
+              <h2 className="text-lg font-medium text-gray-900">{isParentMode ? "Family tasks" : "Available tasks"}</h2>
+              <div className="flex items-center gap-3">
+                <div className="text-sm text-gray-500">{tasks.length} tasks</div>
+                {isParentMode && (
+                  <button
+                    onClick={() => setShowCreateTaskModal(true)}
+                    className="flex items-center gap-1 px-3 py-1 bg-gray-900 text-white text-sm rounded-lg hover:bg-gray-800"
+                  >
+                    <Plus className="w-4 h-4" />
+                    New Task
+                  </button>
+                )}
+              </div>
             </div>
 
             <div className="space-y-3">
@@ -635,15 +743,22 @@ export default function Dash() {
                 <div
                   key={task.id}
                   className={`bg-white p-4 rounded-lg border transition-colors group cursor-pointer ${
-                    task.urgent ? 'border-orange-200 bg-orange-50/30' : 'border-gray-100 hover:border-gray-200'
+                    task.urgent ? "border-orange-200 bg-orange-50/30" : "border-gray-100 hover:border-gray-200"
                   }`}
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex-1">
                       <div className="flex items-center gap-3 mb-2">
                         <h3 className="font-medium text-gray-900">{task.title}</h3>
-                        {task.urgent && <span className="text-xs text-orange-600 bg-orange-100 px-2 py-1 rounded font-medium">Urgent</span>}
+                        {task.urgent && (
+                          <span className="text-xs text-orange-600 bg-orange-100 px-2 py-1 rounded font-medium">
+                            Urgent
+                          </span>
+                        )}
                         <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">{task.category}</span>
+                        {isParentMode && task.kids && (
+                          <span className="text-xs text-blue-600 bg-blue-100 px-2 py-1 rounded">{task.kids.name}</span>
+                        )}
                       </div>
                       <div className="flex items-center gap-4 text-sm text-gray-500">
                         <div className="flex items-center gap-1">
@@ -662,9 +777,16 @@ export default function Dash() {
                         <div className="text-lg font-semibold text-gray-900">${task.reward.toFixed(2)}</div>
                         <div className="text-xs text-gray-500">reward</div>
                       </div>
-                      <button className="opacity-0 group-hover:opacity-100 bg-gray-900 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all hover:bg-gray-800">
-                        Start
-                      </button>
+                      {isParentMode ? (
+                        <button className="opacity-0 group-hover:opacity-100 bg-gray-100 text-gray-700 px-3 py-2 rounded-lg text-sm font-medium transition-all hover:bg-gray-200 flex items-center gap-1">
+                          <Edit3 className="w-4 h-4" />
+                          Edit
+                        </button>
+                      ) : (
+                        <button className="opacity-0 group-hover:opacity-100 bg-gray-900 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all hover:bg-gray-800">
+                          Start
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -750,8 +872,8 @@ export default function Dash() {
 
               <div className="space-y-4">
                 {goals.map((goal, index) => {
-                  const progress = (goal.current / goal.target) * 100
-                  const remaining = goal.target - goal.current
+                  const progress = (goal.current / goal.target) * 100;
+                  const remaining = goal.target - goal.current;
                   return (
                     <div key={index} className="bg-white p-4 rounded-lg border border-gray-100">
                       <div className="flex justify-between items-start mb-3">
@@ -772,12 +894,10 @@ export default function Dash() {
                         <span>${goal.current.toFixed(2)}</span>
                         <span>${goal.target.toFixed(2)}</span>
                       </div>
-                      
-                      <div className="text-xs text-gray-600">
-                        ${remaining.toFixed(2)} to go
-                      </div>
+
+                      <div className="text-xs text-gray-600">${remaining.toFixed(2)} to go</div>
                     </div>
-                  )
+                  );
                 })}
               </div>
             </div>
@@ -785,12 +905,14 @@ export default function Dash() {
             <div className="bg-gray-100 p-4 rounded-lg">
               <h4 className="text-sm font-medium text-gray-900 mb-2">💡 Tip</h4>
               <p className="text-sm text-gray-600">
-                Complete tasks early to build a good reputation with your parents and potentially unlock bonus tasks!
+                {isParentMode
+                  ? "Create specific, achievable tasks with clear rewards to motivate your kids!"
+                  : "Complete tasks early to build a good reputation with your parents and potentially unlock bonus tasks!"}
               </p>
             </div>
           </div>
         </div>
       </main>
     </div>
-  )
+  );
 }
