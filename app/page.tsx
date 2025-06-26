@@ -30,6 +30,7 @@ export default function Dash() {
   });
 
   const [tasks, setTasks] = useState([]);
+  const [ongoingTasks, setOngoingTasks] = useState([]);
   const [completedTasks, setCompletedTasks] = useState([]);
   const [goals, setGoals] = useState([]);
   const [notifications, setNotifications] = useState([]);
@@ -77,7 +78,7 @@ export default function Dash() {
       await checkParentSession();
 
       if (!isParentMode) {
-        await loadKidsAndSelectDefault(user.id);
+        await loadKidsAndSelectDefault(user.id, family.id);
       }
     } catch (error) {
       console.error('Error checking user:', error);
@@ -122,9 +123,15 @@ export default function Dash() {
     }
   };
 
-  const loadKidsAndSelectDefault = async (userId) => {
+  const loadKidsAndSelectDefault = async (userId, familyId = null) => {
     try {
-      const { data: family } = await supabase.from('families').select('*').eq('parent_id', userId).single();
+      let family;
+      if (familyId) {
+        family = { id: familyId };
+      } else {
+        const { data: familyData } = await supabase.from('families').select('*').eq('parent_id', userId).single();
+        family = familyData;
+      }
 
       if (family) {
         const { data: familyKids } = await supabase
@@ -140,7 +147,7 @@ export default function Dash() {
 
         if (kidToSelect) {
           setSelectedKid(kidToSelect);
-          await loadKidData(kidToSelect.id);
+          await loadKidDataWithFamily(kidToSelect.id, family.id);
         }
       }
     } catch (error) {
@@ -163,15 +170,23 @@ export default function Dash() {
     }
   };
 
-  const loadKidData = async (kidId) => {
+  const loadKidDataWithFamily = async (kidId, familyId) => {
     try {
       localStorage.setItem('selectedKidId', kidId);
 
+      // Load tasks assigned to this kid OR available to anyone in the family
       const { data: kidTasks } = await supabase
         .from('tasks')
         .select('*')
+        .eq('family_id', familyId)
+        .eq('status', 'available')
+        .or(`assigned_to.eq.${kidId},assigned_to.is.null`);
+
+      const { data: ongoingKidTasks } = await supabase
+        .from('tasks')
+        .select('*')
         .eq('assigned_to', kidId)
-        .eq('status', 'available');
+        .eq('status', 'in_progress');
 
       const { data: completedKidTasks } = await supabase
         .from('tasks')
@@ -184,10 +199,29 @@ export default function Dash() {
       const { data: kidGoals } = await supabase.from('goals').select('*').eq('kid_id', kidId);
 
       setTasks(kidTasks || []);
+      setOngoingTasks(ongoingKidTasks || []);
       setCompletedTasks(completedKidTasks || []);
       setGoals(kidGoals || []);
 
       calculateKidStats(kidTasks, completedKidTasks);
+    } catch (error) {
+      console.error('Error loading kid data:', error);
+    }
+  };
+
+  const loadKidData = async (kidId) => {
+    try {
+      if (!user?.id) {
+        console.log('User not available, skipping loadKidData');
+        return;
+      }
+
+      // Get family id
+      const { data: family } = await supabase.from('families').select('*').eq('parent_id', user.id).single();
+      
+      if (!family) return;
+
+      await loadKidDataWithFamily(kidId, family.id);
     } catch (error) {
       console.error('Error loading kid data:', error);
     }
@@ -344,11 +378,11 @@ export default function Dash() {
       setIsParentMode(false);
       setParentSession(null);
 
-      if (selectedKid) {
-        loadKidData(selectedKid.id);
-      } else if (kids.length > 0) {
+      if (selectedKid && user?.id) {
+        await loadKidData(selectedKid.id);
+      } else if (kids.length > 0 && user?.id) {
         setSelectedKid(kids[0]);
-        loadKidData(kids[0].id);
+        await loadKidData(kids[0].id);
       }
     } catch (error) {
       console.error('Error switching to kid mode:', error);
@@ -358,6 +392,54 @@ export default function Dash() {
   const handleKidSelection = async (kid) => {
     setSelectedKid(kid);
     await loadKidData(kid.id);
+  };
+
+  const handleStartTask = async (taskId) => {
+    try {
+      if (!selectedKid?.id) {
+        alert('Please select a kid first');
+        return;
+      }
+
+      const { error } = await supabase
+        .from('tasks')
+        .update({ 
+          status: 'in_progress',
+          assigned_to: selectedKid.id,
+          started_at: new Date().toISOString()
+        })
+        .eq('id', taskId);
+
+      if (error) throw error;
+
+      // Redirect to task page after starting
+      router.push(`/task/${taskId}`);
+    } catch (error) {
+      console.error('Error starting task:', error);
+      alert('Failed to start task');
+    }
+  };
+
+  const handleCompleteTask = async (taskId) => {
+    try {
+      const { error } = await supabase
+        .from('tasks')
+        .update({ 
+          status: 'completed',
+          completed_at: new Date().toISOString()
+        })
+        .eq('id', taskId);
+
+      if (error) throw error;
+
+      // Reload kid data to update task lists
+      if (selectedKid) {
+        await loadKidData(selectedKid.id);
+      }
+    } catch (error) {
+      console.error('Error completing task:', error);
+      alert('Failed to complete task');
+    }
   };
 
   const handleSignOut = async () => {
@@ -722,6 +804,69 @@ export default function Dash() {
 
         <div className="grid lg:grid-cols-3 gap-12">
           <div className="lg:col-span-2">
+            {!isParentMode && ongoingTasks.length > 0 && (
+              <div className="mb-8">
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-lg font-medium text-gray-900">Your ongoing tasks</h2>
+                  <div className="text-sm text-gray-500">{ongoingTasks.length} tasks</div>
+                </div>
+
+                <div className="space-y-3">
+                  {ongoingTasks.map((task) => (
+                    <div
+                      key={task.id}
+                      className="bg-blue-50 p-4 rounded-lg border border-blue-200 group"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3 mb-2">
+                            <h3 className="font-medium text-gray-900">{task.title}</h3>
+                            <span className="text-xs text-blue-600 bg-blue-100 px-2 py-1 rounded font-medium">
+                              In Progress
+                            </span>
+                            <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">{task.category}</span>
+                          </div>
+                          <div className="flex items-center gap-4 text-sm text-gray-500 mb-2">
+                            <div className="flex items-center gap-1">
+                              <Clock className="w-4 h-4" />
+                              <span>{task.deadline}</span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <span className="text-xs">{task.time_estimate}</span>
+                              <span className="text-xs">•</span>
+                              <span className="text-xs">{task.difficulty}</span>
+                            </div>
+                          </div>
+                          {task.description && (
+                            <p className="text-sm text-gray-600">{task.description}</p>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <div className="text-right">
+                            <div className="text-lg font-semibold text-gray-900">${task.reward.toFixed(2)}</div>
+                            <div className="text-xs text-gray-500">reward</div>
+                          </div>
+                          <div className="flex gap-2">
+                            <Link href={`/task/${task.id}`}>
+                              <button className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all hover:bg-blue-700">
+                                Continue
+                              </button>
+                            </Link>
+                            <button
+                              onClick={() => handleCompleteTask(task.id)}
+                              className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all hover:bg-green-700"
+                            >
+                              Complete
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-lg font-medium text-gray-900">{isParentMode ? "Family tasks" : "Available tasks"}</h2>
               <div className="flex items-center gap-3">
@@ -783,7 +928,10 @@ export default function Dash() {
                           Edit
                         </button>
                       ) : (
-                        <button className="opacity-0 group-hover:opacity-100 bg-gray-900 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all hover:bg-gray-800">
+                        <button
+                          onClick={() => handleStartTask(task.id)}
+                          className="opacity-0 group-hover:opacity-100 bg-gray-900 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all hover:bg-gray-800"
+                        >
                           Start
                         </button>
                       )}
