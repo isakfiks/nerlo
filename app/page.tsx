@@ -1,5 +1,5 @@
 "use client";
-import { Bell, CheckCircle2, Clock, DollarSign, Star, MoreHorizontal, User, Flame, LogOut, Settings, Plus, Edit3 } from 'lucide-react';
+import { Bell, CheckCircle2, Clock, DollarSign, Star, User, Flame, LogOut, Settings, Plus, ArrowRight } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
@@ -235,12 +235,15 @@ export default function Dash() {
           *,
           kids(name)
         `)
-        .eq('family_id', familyId);
+        .eq('family_id', familyId)
+        .order('created_at', { ascending: false });
 
       const availableTasks = allTasks?.filter((task) => task.status === 'available') || [];
+      const inProgressTasks = allTasks?.filter((task) => task.status === 'in_progress') || [];
       const completed = allTasks?.filter((task) => ['completed', 'approved'].includes(task.status)) || [];
 
       setTasks(availableTasks);
+      setOngoingTasks(inProgressTasks);
       setCompletedTasks(completed);
 
       calculateFamilyStats(allTasks);
@@ -473,37 +476,35 @@ export default function Dash() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="text-2xl font-medium text-gray-900 mb-2">Nerlo</div>
-          <div className="text-sm text-gray-500">Loading...</div>
-        </div>
+      <div className="min-h-screen bg-white flex items-center justify-center">
+        <div className="w-1 h-1 bg-gray-900 rounded-full animate-pulse"></div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-white">
       {showSessionWarning && (
-        <div className="bg-yellow-50 border-b border-yellow-200 px-4 py-2">
+        <div className="border-b border-orange-100 px-8 py-4">
           <div className="max-w-5xl mx-auto">
-            <p className="text-sm text-yellow-800">
-              Parent session expires in {Math.ceil(sessionTimeRemaining / 60000)} minutes.
-              <button onClick={() => setShowParentPinModal(true)} className="ml-2 underline hover:no-underline">
-                Extend session
+            <p className="text-sm text-orange-600">
+              Session expires in {Math.ceil(sessionTimeRemaining / 60000)} minutes.
+              <button onClick={() => setShowParentPinModal(true)} className="ml-2 underline underline-offset-2">
+                Extend
               </button>
             </p>
           </div>
         </div>
       )}
 
-      <header className="bg-white border-b border-gray-100">
-        <div className="max-w-5xl mx-auto px-6 py-4">
+      <div className="border-b border-gray-100">
+        <div className="max-w-5xl mx-auto px-8 py-6">
           <div className="flex items-center justify-between">
             <Link href="/">
-              <h1 className="text-xl font-medium text-gray-900">Nerlo</h1>
+              <h1 className="text-lg font-medium text-gray-900">Nerlo</h1>
             </Link>
-            <div className="flex items-center gap-4">
+            
+            <div className="flex items-center gap-8">
               {!isParentMode && kids.length > 1 && (
                 <select
                   value={selectedKid?.id || ""}
@@ -511,7 +512,7 @@ export default function Dash() {
                     const kid = kids.find((k) => k.id === e.target.value);
                     if (kid) handleKidSelection(kid);
                   }}
-                  className="text-sm border border-gray-300 rounded-lg px-3 py-1 focus:outline-none focus:ring-2 focus:ring-gray-900"
+                  className="text-sm border-0 bg-transparent focus:outline-none text-gray-600"
                 >
                   {kids.map((kid) => (
                     <option key={kid.id} value={kid.id}>
@@ -522,103 +523,59 @@ export default function Dash() {
               )}
 
               {isParentMode ? (
-                <div className="flex items-center gap-2">
-                  <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded flex items-center gap-1">
-                    <Settings className="w-3 h-3" />
-                    Parent Mode
-                    {sessionTimeRemaining > 0 && (
-                      <span className="text-xs opacity-75">({Math.ceil(sessionTimeRemaining / 60000)}m)</span>
-                    )}
-                  </span>
-                  <button onClick={switchToKidMode} className="text-xs text-gray-500 hover:text-gray-700">
-                    Exit Parent Mode
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-gray-500">Parent Mode</span>
+                  <button onClick={switchToKidMode} className="text-xs text-gray-400 hover:text-gray-600">
+                    Exit
                   </button>
                 </div>
               ) : (
-                <div className="flex items-center gap-2">
-                  {selectedKid && (
-                    <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">{selectedKid.name}</span>
-                  )}
-                  <button
-                    onClick={() => setShowParentPinModal(true)}
-                    className="text-xs bg-gray-100 text-gray-700 px-3 py-1 rounded hover:bg-gray-200 flex items-center gap-1"
-                  >
-                    <Settings className="w-3 h-3" />
-                    Parent
-                  </button>
-                </div>
+                <button
+                  onClick={() => setShowParentPinModal(true)}
+                  className="text-xs text-gray-500 hover:text-gray-700"
+                >
+                  Parent Access
+                </button>
               )}
 
-              <div className="flex items-center gap-2 text-sm">
-                <span className="text-gray-500">Pending:</span>
-                <span className="font-medium text-orange-600">${stats.pendingEarnings.toFixed(2)}</span>
+              <div className="text-sm text-gray-500">
+                ${stats.pendingEarnings.toFixed(2)} pending
               </div>
 
               <div className="relative">
                 <button
                   onClick={() => setShowNotifications(!showNotifications)}
-                  className="p-2 hover:bg-gray-50 rounded-lg transition-colors relative"
+                  className="p-2 hover:bg-gray-50 rounded-full transition-colors relative"
                 >
-                  <Bell className="w-5 h-5 text-gray-600" />
+                  <Bell className="w-4 h-4 text-gray-500" />
                   {unreadCount > 0 && (
-                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-medium">
+                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">
                       {unreadCount}
                     </span>
                   )}
                 </button>
 
                 {showNotifications && (
-                  <div className="absolute right-0 top-12 w-80 bg-white rounded-lg shadow-lg border border-gray-100 z-50">
-                    <div className="p-4 border-b border-gray-100">
-                      <div className="flex items-center justify-between">
-                        <h3 className="font-medium text-gray-900">Notifications</h3>
-                        {unreadCount > 0 && (
-                          <button className="text-xs text-blue-600 hover:text-blue-700">Mark all read</button>
-                        )}
-                      </div>
+                  <div className="absolute right-0 top-12 w-80 bg-white rounded-lg shadow-xl border border-gray-100 z-50">
+                    <div className="p-6 border-b border-gray-100">
+                      <h3 className="font-medium text-gray-900">Notifications</h3>
                     </div>
-                    <div className="max-h-96 overflow-y-auto">
-                      {notifications.map((notification) => (
-                        <div
-                          key={notification.id}
-                          className={`p-4 border-b border-gray-50 hover:bg-gray-50 transition-colors ${
-                            !notification.read ? 'bg-blue-50/50' : ''
-                          }`}
-                        >
-                          <div className="flex items-start gap-3">
-                            <div
-                              className={`w-2 h-2 rounded-full mt-2 ${
-                                !notification.read ? 'bg-blue-500' : 'bg-transparent'
-                              }`}
-                            />
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2 mb-1">
-                                {notification.type === "approval" && (
-                                  <CheckCircle2 className="w-4 h-4 text-green-500" />
-                                )}
-                                {notification.type === "reminder" && <Clock className="w-4 h-4 text-orange-500" />}
-                                {notification.type === "bonus" && <Star className="w-4 h-4 text-yellow-500" />}
-                                {notification.type === "payment" && <DollarSign className="w-4 h-4 text-green-500" />}
-                                {notification.type === "streak" && <Flame className="w-4 h-4 text-orange-400" />}
-                                <span className="text-sm font-medium text-gray-900">{notification.message}</span>
-                              </div>
-                              <div className="flex items-center justify-between">
-                                <span className="text-xs text-gray-500">{notification.time}</span>
-                                {notification.reward && (
-                                  <span className="text-xs font-medium text-green-600">
-                                    +${notification.reward.toFixed(2)}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          </div>
+                    <div className="max-h-96 overflow-y-auto p-2">
+                      {notifications.length === 0 ? (
+                        <div className="p-6 text-center text-gray-400 text-sm">
+                          No notifications
                         </div>
-                      ))}
-                    </div>
-                    <div className="p-4 border-t border-gray-100">
-                      <button className="text-sm text-gray-500 hover:text-gray-700 w-full text-center">
-                        View all notifications
-                      </button>
+                      ) : (
+                        notifications.map((notification) => (
+                          <div
+                            key={notification.id}
+                            className="p-4 hover:bg-gray-50 rounded-lg transition-colors"
+                          >
+                            <div className="text-sm text-gray-900 mb-1">{notification.message}</div>
+                            <div className="text-xs text-gray-500">{notification.time}</div>
+                          </div>
+                        ))
+                      )}
                     </div>
                   </div>
                 )}
@@ -629,11 +586,11 @@ export default function Dash() {
                   onClick={() => setShowUserMenu(!showUserMenu)}
                   className="w-8 h-8 bg-gray-900 rounded-full flex items-center justify-center hover:bg-gray-800 transition-colors"
                 >
-                  <User className="text-gray-50 w-4 h-4" />
+                  <User className="text-white w-4 h-4" />
                 </button>
 
                 {showUserMenu && (
-                  <div className="absolute right-0 top-10 w-48 bg-white rounded-lg shadow-lg border border-gray-100 z-50">
+                  <div className="absolute right-0 top-10 w-48 bg-white rounded-lg shadow-xl border border-gray-100 z-50">
                     <div className="p-2">
                       <button
                         onClick={handleSignOut}
@@ -649,42 +606,338 @@ export default function Dash() {
             </div>
           </div>
         </div>
-      </header>
+      </div>
 
-      {/* Create Task Modal */}
+      <div className="max-w-5xl mx-auto px-8 py-16">
+        
+        <div className="text-center mb-24">
+          <div className="text-5xl font-light text-gray-900 mb-4">
+            ${stats.totalEarned.toFixed(2)}
+          </div>
+          <div className="text-gray-500 mb-6">
+            {isParentMode ? "Family earnings" : `${selectedKid?.name || "Your"} total earned`}
+          </div>
+          
+          <div className="flex items-center justify-center gap-8 text-sm text-gray-500">
+            <div className="flex items-center gap-2">
+              <Flame className="w-4 h-4 text-orange-400" />
+              <span>{stats.weeklyStats.currentStreak} day streak</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Star className="w-4 h-4 text-yellow-500" />
+              <span>{stats.weeklyStats.completionRate}% completion</span>
+            </div>
+            <div className="text-gray-400">
+              ${totalAvailableEarnings.toFixed(2)} available
+            </div>
+          </div>
+        </div>
+
+        <div className="grid lg:grid-cols-4 gap-16">
+          <div className="lg:col-span-3">
+            
+            {!isParentMode && ongoingTasks.length > 0 && (
+              <div className="mb-16">
+                <h2 className="text-lg font-light text-gray-900 mb-8">Continue working</h2>
+                
+                <div className="space-y-6">
+                  {ongoingTasks.map((task) => (
+                    <div key={task.id} className="group">
+                      <div className="flex items-center justify-between py-6 border-b border-gray-100">
+                        <div className="flex-1">
+                          <h3 className="text-gray-900 mb-2">{task.title}</h3>
+                          <div className="flex items-center gap-4 text-sm text-gray-500">
+                            <span>{task.category}</span>
+                            <span>•</span>
+                            <span>{task.time_estimate}</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-6">
+                          <div className="text-right">
+                            <div className="text-gray-900">${task.reward.toFixed(2)}</div>
+                            <div className="text-xs text-gray-500">reward</div>
+                          </div>
+                          <Link href={`/task/${task.id}`}>
+                            <button className="px-6 py-2 bg-gray-900 text-white rounded-full hover:bg-gray-800 transition-colors">
+                              Continue
+                            </button>
+                          </Link>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="mb-16">
+              <div className="flex items-center justify-between mb-8">
+                <h2 className="text-lg font-light text-gray-900">
+                  {isParentMode ? "Available tasks" : "Available tasks"}
+                </h2>
+                <div className="flex items-center gap-4">
+                  <span className="text-sm text-gray-500">{tasks.length}</span>
+                  {isParentMode && (
+                    <button
+                      onClick={() => setShowCreateTaskModal(true)}
+                      className="flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-full hover:bg-gray-800 transition-colors"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>New</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                {tasks.map((task) => (
+                  <div key={task.id} className="group">
+                    <div className="flex items-center justify-between py-6 border-b border-gray-100 hover:bg-gray-50 -mx-4 px-4 rounded-lg transition-colors">
+                      <div className="flex-1">
+                        <h3 className="text-gray-900 mb-2">{task.title}</h3>
+                        <div className="flex items-center gap-4 text-sm text-gray-500">
+                          <span>{task.category}</span>
+                          <span>•</span>
+                          <span>{task.time_estimate}</span>
+                          <span>•</span>
+                          <span>{task.difficulty}</span>
+                          {task.urgent && (
+                            <>
+                              <span>•</span>
+                              <span className="text-orange-600">Urgent</span>
+                            </>
+                          )}
+                          {isParentMode && task.assigned_to && (
+                            <>
+                              <span>•</span>
+                              <span className="text-blue-600">Assigned to {task.kids?.name}</span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-6">
+                        <div className="text-right">
+                          <div className="text-gray-900">${task.reward.toFixed(2)}</div>
+                          <div className="text-xs text-gray-500">reward</div>
+                        </div>
+                        {!isParentMode && (
+                          <button
+                            onClick={() => handleStartTask(task.id)}
+                            className="opacity-0 group-hover:opacity-100 px-6 py-2 bg-gray-900 text-white rounded-full hover:bg-gray-800 transition-all"
+                          >
+                            Start
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {isParentMode && ongoingTasks.length > 0 && (
+              <div className="mb-16">
+                <h2 className="text-lg font-light text-gray-900 mb-8">In progress</h2>
+                
+                <div className="space-y-1">
+                  {ongoingTasks.map((task) => (
+                    <div key={task.id} className="group">
+                      <div className="flex items-center justify-between py-6 border-b border-gray-100 hover:bg-gray-50 -mx-4 px-4 rounded-lg transition-colors">
+                        <div className="flex-1">
+                          <h3 className="text-gray-900 mb-2">{task.title}</h3>
+                          <div className="flex items-center gap-4 text-sm text-gray-500">
+                            <span>{task.category}</span>
+                            <span>•</span>
+                            <span>{task.time_estimate}</span>
+                            <span>•</span>
+                            <span className="text-blue-600">{task.kids?.name}</span>
+                            {task.started_at && (
+                              <>
+                                <span>•</span>
+                                <span>Started {new Date(task.started_at).toLocaleDateString()}</span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-6">
+                          <div className="text-right">
+                            <div className="text-gray-900">${task.reward.toFixed(2)}</div>
+                            <div className="text-xs text-blue-600">In progress</div>
+                          </div>
+                          <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div>
+              <div className="flex items-center justify-between mb-8">
+                <h2 className="text-lg font-light text-gray-900">Recent completions</h2>
+                {isParentMode && (
+                  <span className="text-sm text-gray-500">{completedTasks.length} completed</span>
+                )}
+              </div>
+              
+              <div className="space-y-1">
+                {completedTasks.map((task) => (
+                  <div key={task.id} className="group">
+                    <div className="flex items-center justify-between py-4 border-b border-gray-100">
+                      <div className="flex items-center gap-4">
+                        <div className="w-6 h-6 rounded-full bg-green-100 flex items-center justify-center">
+                          <CheckCircle2 className={`w-3 h-3 ${task.status === "approved" ? "text-green-600" : "text-orange-500"}`} />
+                        </div>
+                        <div>
+                          <div className="text-gray-900 text-sm">{task.title}</div>
+                          <div className="text-xs text-gray-500">
+                            {isParentMode && task.kids?.name && (
+                              <span>{task.kids.name} • </span>
+                            )}
+                            {task.completed_at ? new Date(task.completed_at).toLocaleDateString() : task.completedAt}
+                            {task.work_time_ms && (
+                              <span> • {Math.round(task.work_time_ms / 60000)}min worked</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <div className="text-sm text-gray-900">${task.reward.toFixed(2)}</div>
+                        <div className={`text-xs ${task.status === "approved" ? "text-green-600" : "text-orange-500"}`}>
+                          {task.status === "approved" ? "Paid" : "Pending"}
+                        </div>
+                        {isParentMode && task.status === "completed" && (
+                          <button
+                            onClick={async () => {
+                              try {
+                                const { error } = await supabase
+                                  .from('tasks')
+                                  .update({ status: 'approved' })
+                                  .eq('id', task.id);
+
+                                if (error) throw error;
+
+                                // Reload tasks
+                                const { data: family } = await supabase.from('families').select('id').eq('parent_id', user.id).single();
+                                if (family) await loadAllFamilyTasks(family.id);
+                              } catch (error) {
+                                console.error('Error approving task:', error);
+                                alert('Failed to approve task');
+                              }
+                            }}
+                            className="opacity-0 group-hover:opacity-100 px-3 py-1 bg-green-600 text-white rounded-full text-xs hover:bg-green-700 transition-all"
+                          >
+                            Approve
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+          </div>
+
+          <div>
+            
+            <div className="mb-12">
+              <h3 className="text-sm font-medium text-gray-900 mb-6">This week</h3>
+              <div className="space-y-4">
+                <div className="flex justify-between">
+                  <span className="text-sm text-gray-500">Tasks completed</span>
+                  <span className="text-sm text-gray-900">{stats.weeklyStats.tasksCompleted}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-gray-500">Earned</span>
+                  <span className="text-sm text-gray-900">${stats.weeklyStats.earned.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-gray-500">Completion rate</span>
+                  <span className="text-sm text-gray-900">{stats.weeklyStats.completionRate}%</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="mb-12">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-sm font-medium text-gray-900">Goals</h3>
+                <button className="text-xs text-gray-500 hover:text-gray-700">New</button>
+              </div>
+
+              <div className="space-y-6">
+                {goals.map((goal, index) => {
+                  const progress = (goal.current / goal.target) * 100;
+                  return (
+                    <div key={index}>
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-sm text-gray-900">{goal.name}</span>
+                        <span className="text-xs text-gray-500">{progress.toFixed(0)}%</span>
+                      </div>
+                      <div className="w-full bg-gray-100 rounded-full h-1">
+                        <div
+                          className="bg-gray-900 h-1 rounded-full transition-all"
+                          style={{ width: `${Math.min(progress, 100)}%` }}
+                        />
+                      </div>
+                      <div className="flex justify-between text-xs text-gray-500 mt-1">
+                        <span>${goal.current.toFixed(2)}</span>
+                        <span>${goal.target.toFixed(2)}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="p-4 bg-gray-50 rounded-lg">
+              <div className="text-sm text-gray-600">
+                {isParentMode
+                  ? "Create clear, achievable tasks to motivate your kids."
+                  : "Complete tasks consistently to build momentum and unlock bonuses."}
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
       {showCreateTaskModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-lg shadow-lg w-96 max-h-[90vh] overflow-y-auto">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">Create New Task</h3>
-            <form onSubmit={handleCreateTask} className="space-y-4">
+          <div className="bg-white p-8 rounded-lg shadow-xl w-96 max-h-[90vh] overflow-y-auto">
+            <h3 className="text-lg font-medium text-gray-900 mb-6">Create New Task</h3>
+            <form onSubmit={handleCreateTask} className="space-y-6">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
+                <label className="block text-sm text-gray-700 mb-2">Title</label>
                 <input
                   type="text"
                   value={newTask.title}
                   onChange={(e) => setNewTask({ ...newTask, title: e.target.value })}
-                  className="placeholder-gray-400 text-gray-900 w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900"
+                  className="w-full p-0 border-0 text-gray-900 placeholder-gray-400 focus:outline-none"
                   required
                 />
+                <div className="h-px bg-gray-200 mt-2"></div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                <label className="block text-sm text-gray-700 mb-2">Description</label>
                 <textarea
                   value={newTask.description}
                   onChange={(e) => setNewTask({ ...newTask, description: e.target.value })}
-                  className="placeholder-gray-400 text-gray-900 w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900"
+                  className="w-full p-0 border-0 text-gray-900 placeholder-gray-400 resize-none focus:outline-none"
                   rows={3}
                 />
+                <div className="h-px bg-gray-200 mt-2"></div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-6">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                  <label className="block text-sm text-gray-700 mb-2">Category</label>
                   <select
                     value={newTask.category}
                     onChange={(e) => setNewTask({ ...newTask, category: e.target.value })}
-                    className="placeholder-gray-400 text-gray-900 w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900"
+                    className="w-full p-0 border-0 text-gray-900 bg-transparent focus:outline-none"
                   >
                     <option value="chores">Chores</option>
                     <option value="homework">Homework</option>
@@ -692,27 +945,29 @@ export default function Dash() {
                     <option value="creative">Creative</option>
                     <option value="other">Other</option>
                   </select>
+                  <div className="h-px bg-gray-200 mt-2"></div>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Reward ($)</label>
+                  <label className="block text-sm text-gray-700 mb-2">Reward ($)</label>
                   <input
                     type="number"
                     step="0.01"
                     value={newTask.reward}
                     onChange={(e) => setNewTask({ ...newTask, reward: e.target.value })}
-                    className="placeholder-gray-400 text-gray-900 w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900"
+                    className="w-full p-0 border-0 text-gray-900 placeholder-gray-400 focus:outline-none"
                     required
                   />
+                  <div className="h-px bg-gray-200 mt-2"></div>
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Assign to</label>
+                <label className="block text-sm text-gray-700 mb-2">Assign to</label>
                 <select
                   value={newTask.assigned_to}
                   onChange={(e) => setNewTask({ ...newTask, assigned_to: e.target.value })}
-                  className="placeholder-gray-400 text-gray-900 w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900"
+                  className="w-full p-0 border-0 text-gray-900 bg-transparent focus:outline-none"
                 >
                   <option value="">Anyone can claim</option>
                   {kids.map((kid) => (
@@ -721,17 +976,18 @@ export default function Dash() {
                     </option>
                   ))}
                 </select>
+                <div className="h-px bg-gray-200 mt-2"></div>
               </div>
 
-              <div className="flex gap-2">
+              <div className="flex gap-3 pt-4">
                 <button
                   type="button"
                   onClick={() => setShowCreateTaskModal(false)}
-                  className="flex-1 px-4 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50"
+                  className="flex-1 px-6 py-3 text-gray-600 border border-gray-200 rounded-full hover:bg-gray-50 transition-colors"
                 >
                   Cancel
                 </button>
-                <button type="submit" className="flex-1 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800">
+                <button type="submit" className="flex-1 px-6 py-3 bg-gray-900 text-white rounded-full hover:bg-gray-800 transition-colors">
                   Create Task
                 </button>
               </div>
@@ -742,37 +998,38 @@ export default function Dash() {
 
       {showParentPinModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-lg shadow-lg w-80">
+          <div className="bg-white p-8 rounded-lg shadow-xl w-80">
             <h3 className="text-lg font-medium text-gray-900 mb-4">
-              {isParentMode ? "Extend Parent Session" : "Parent Access"}
+              {isParentMode ? "Extend Session" : "Parent Access"}
             </h3>
-            <p className="text-sm text-gray-600 mb-4">
+            <p className="text-sm text-gray-600 mb-6">
               {isParentMode
-                ? "Enter your PIN to extend the parent session for another 30 minutes"
-                : "Enter the parent PIN to access family management"}
+                ? "Enter your PIN to extend the session"
+                : "Enter the parent PIN to access management"}
             </p>
             <form onSubmit={handleParentPinSubmit}>
               <input
                 type="password"
                 value={parentPin}
                 onChange={(e) => setParentPin(e.target.value)}
-                className="placeholder-gray-400 text-gray-900 w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent mb-4"
-                placeholder="Enter parent PIN"
+                className="w-full p-0 border-0 text-gray-900 placeholder-gray-400 focus:outline-none text-center text-lg mb-2"
+                placeholder="Enter PIN"
                 maxLength={6}
                 autoFocus
               />
-              <div className="flex gap-2">
+              <div className="h-px bg-gray-200 mb-6"></div>
+              <div className="flex gap-3">
                 <button
                   type="button"
                   onClick={() => {
                     setShowParentPinModal(false);
                     setParentPin("");
                   }}
-                  className="flex-1 px-4 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50"
+                  className="flex-1 px-4 py-2 text-gray-600 border border-gray-200 rounded-full hover:bg-gray-50 transition-colors"
                 >
                   Cancel
                 </button>
-                <button type="submit" className="flex-1 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800">
+                <button type="submit" className="flex-1 px-4 py-2 bg-gray-900 text-white rounded-full hover:bg-gray-800 transition-colors">
                   {isParentMode ? "Extend" : "Access"}
                 </button>
               </div>
@@ -781,286 +1038,6 @@ export default function Dash() {
         </div>
       )}
 
-      <main className="max-w-5xl mx-auto px-6 py-8">
-        <div className="mb-12">
-          <div className="text-center">
-            <div className="text-4xl font-light text-gray-900 mb-2">${stats.totalEarned.toFixed(2)}</div>
-            <div className="text-sm text-gray-500">
-              {isParentMode ? "Family earnings" : `${selectedKid?.name || "Your"} earnings`}
-            </div>
-            <div className="text-xs text-gray-400 mt-1">${totalAvailableEarnings.toFixed(2)} available to earn</div>
-            <div className="flex items-center justify-center gap-4 mt-4">
-              <div className="flex items-center gap-1 text-xs text-gray-500">
-                <Flame className="w-3 h-3 text-orange-400" fill="currentColor" />
-                <span>{stats.weeklyStats.currentStreak} day streak</span>
-              </div>
-              <div className="flex items-center gap-1 text-xs text-gray-500">
-                <Star className="w-3 h-3 text-yellow-500" fill="currentColor" />
-                <span>{stats.weeklyStats.completionRate}% completion</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="grid lg:grid-cols-3 gap-12">
-          <div className="lg:col-span-2">
-            {!isParentMode && ongoingTasks.length > 0 && (
-              <div className="mb-8">
-                <div className="flex items-center justify-between mb-6">
-                  <h2 className="text-lg font-medium text-gray-900">Your ongoing tasks</h2>
-                  <div className="text-sm text-gray-500">{ongoingTasks.length} tasks</div>
-                </div>
-
-                <div className="space-y-3">
-                  {ongoingTasks.map((task) => (
-                    <div
-                      key={task.id}
-                      className="bg-blue-50 p-4 rounded-lg border border-blue-200 group"
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-3 mb-2">
-                            <h3 className="font-medium text-gray-900">{task.title}</h3>
-                            <span className="text-xs text-blue-600 bg-blue-100 px-2 py-1 rounded font-medium">
-                              In Progress
-                            </span>
-                            <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">{task.category}</span>
-                          </div>
-                          <div className="flex items-center gap-4 text-sm text-gray-500 mb-2">
-                            <div className="flex items-center gap-1">
-                              <Clock className="w-4 h-4" />
-                              <span>{task.deadline}</span>
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <span className="text-xs">{task.time_estimate}</span>
-                              <span className="text-xs">•</span>
-                              <span className="text-xs">{task.difficulty}</span>
-                            </div>
-                          </div>
-                          {task.description && (
-                            <p className="text-sm text-gray-600">{task.description}</p>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <div className="text-right">
-                            <div className="text-lg font-semibold text-gray-900">${task.reward.toFixed(2)}</div>
-                            <div className="text-xs text-gray-500">reward</div>
-                          </div>
-                          <div className="flex gap-2">
-                            <Link href={`/task/${task.id}`}>
-                              <button className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all hover:bg-blue-700">
-                                Continue
-                              </button>
-                            </Link>
-                            <button
-                              onClick={() => handleCompleteTask(task.id)}
-                              className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all hover:bg-green-700"
-                            >
-                              Complete
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-medium text-gray-900">{isParentMode ? "Family tasks" : "Available tasks"}</h2>
-              <div className="flex items-center gap-3">
-                <div className="text-sm text-gray-500">{tasks.length} tasks</div>
-                {isParentMode && (
-                  <button
-                    onClick={() => setShowCreateTaskModal(true)}
-                    className="flex items-center gap-1 px-3 py-1 bg-gray-900 text-white text-sm rounded-lg hover:bg-gray-800"
-                  >
-                    <Plus className="w-4 h-4" />
-                    New Task
-                  </button>
-                )}
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              {tasks.map((task) => (
-                <div
-                  key={task.id}
-                  className={`bg-white p-4 rounded-lg border transition-colors group cursor-pointer ${
-                    task.urgent ? "border-orange-200 bg-orange-50/30" : "border-gray-100 hover:border-gray-200"
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-2">
-                        <h3 className="font-medium text-gray-900">{task.title}</h3>
-                        {task.urgent && (
-                          <span className="text-xs text-orange-600 bg-orange-100 px-2 py-1 rounded font-medium">
-                            Urgent
-                          </span>
-                        )}
-                        <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">{task.category}</span>
-                        {isParentMode && task.kids && (
-                          <span className="text-xs text-blue-600 bg-blue-100 px-2 py-1 rounded">{task.kids.name}</span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-4 text-sm text-gray-500">
-                        <div className="flex items-center gap-1">
-                          <Clock className="w-4 h-4" />
-                          <span>{task.deadline}</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <span className="text-xs">{task.time_estimate}</span>
-                          <span className="text-xs">•</span>
-                          <span className="text-xs">{task.difficulty}</span>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <div className="text-right">
-                        <div className="text-lg font-semibold text-gray-900">${task.reward.toFixed(2)}</div>
-                        <div className="text-xs text-gray-500">reward</div>
-                      </div>
-                      {isParentMode ? (
-                        <button className="opacity-0 group-hover:opacity-100 bg-gray-100 text-gray-700 px-3 py-2 rounded-lg text-sm font-medium transition-all hover:bg-gray-200 flex items-center gap-1">
-                          <Edit3 className="w-4 h-4" />
-                          Edit
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => handleStartTask(task.id)}
-                          className="opacity-0 group-hover:opacity-100 bg-gray-900 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all hover:bg-gray-800"
-                        >
-                          Start
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className="mt-12">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-lg font-medium text-gray-900">Recent completions</h2>
-                <button className="text-sm text-gray-500 hover:text-gray-700">View all</button>
-              </div>
-
-              <div className="space-y-1">
-                {completedTasks.map((task) => (
-                  <div
-                    key={task.id}
-                    className="flex items-center justify-between py-3 px-4 hover:bg-white rounded-lg transition-colors group"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center">
-                        <CheckCircle2
-                          className={`w-4 h-4 ${task.status === "approved" ? "text-green-600" : "text-orange-500"}`}
-                        />
-                      </div>
-                      <div>
-                        <div className="font-medium text-gray-900 text-sm">{task.title}</div>
-                        <div className="text-xs text-gray-500">{task.completedAt}</div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="text-sm">
-                        <span className="font-medium text-gray-900">${task.reward.toFixed(2)}</span>
-                        <span
-                          className={`ml-2 text-xs ${task.status === "approved" ? "text-green-600" : "text-orange-500"}`}
-                        >
-                          {task.status === "approved" ? "Paid" : "Pending"}
-                        </span>
-                      </div>
-                      <button className="opacity-0 group-hover:opacity-100 p-1 hover:bg-gray-100 rounded transition-all">
-                        <MoreHorizontal className="w-4 h-4 text-gray-400" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div>
-            <div className="bg-white p-4 rounded-lg border border-gray-100 mb-8">
-              <h3 className="text-sm font-medium text-gray-900 mb-4">This week</h3>
-              <div className="space-y-3">
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-500">Tasks completed</span>
-                  <span className="font-medium text-gray-900">{stats.weeklyStats.tasksCompleted}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-500">Earned</span>
-                  <span className="font-medium text-gray-900">${stats.weeklyStats.earned.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-500">Completion rate</span>
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium text-gray-900">{stats.weeklyStats.completionRate}%</span>
-                    <Star className="w-4 h-4 text-yellow-500" />
-                  </div>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-500">Current streak</span>
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium text-gray-900">{stats.weeklyStats.currentStreak} days</span>
-                    <Flame className="w-4 h-4 text-orange-400" fill="currentColor" />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="mb-8">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-lg font-medium text-gray-900">Goals</h2>
-                <button className="text-sm text-gray-500 hover:text-gray-700">New</button>
-              </div>
-
-              <div className="space-y-4">
-                {goals.map((goal, index) => {
-                  const progress = (goal.current / goal.target) * 100;
-                  const remaining = goal.target - goal.current;
-                  return (
-                    <div key={index} className="bg-white p-4 rounded-lg border border-gray-100">
-                      <div className="flex justify-between items-start mb-3">
-                        <h3 className="font-medium text-gray-900 text-sm">{goal.name}</h3>
-                        <div className="text-xs text-gray-500">{progress.toFixed(0)}%</div>
-                      </div>
-
-                      <div className="mb-3">
-                        <div className="w-full bg-gray-100 rounded-full h-1.5">
-                          <div
-                            className="bg-gray-900 h-1.5 rounded-full transition-all duration-500"
-                            style={{ width: `${Math.min(progress, 100)}%` }}
-                          />
-                        </div>
-                      </div>
-
-                      <div className="flex justify-between text-xs text-gray-500 mb-2">
-                        <span>${goal.current.toFixed(2)}</span>
-                        <span>${goal.target.toFixed(2)}</span>
-                      </div>
-
-                      <div className="text-xs text-gray-600">${remaining.toFixed(2)} to go</div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="bg-gray-100 p-4 rounded-lg">
-              <h4 className="text-sm font-medium text-gray-900 mb-2">💡 Tip</h4>
-              <p className="text-sm text-gray-600">
-                {isParentMode
-                  ? "Create specific, achievable tasks with clear rewards to motivate your kids!"
-                  : "Complete tasks early to build a good reputation with your parents and potentially unlock bonus tasks!"}
-              </p>
-            </div>
-          </div>
-        </div>
-      </main>
     </div>
   );
 }
