@@ -5,12 +5,19 @@ import { NextRequest, NextResponse } from 'next/server'
 export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url)
   const code = requestUrl.searchParams.get('code')
+  const type = requestUrl.searchParams.get('type')
 
   if (code) {
     const supabase = createRouteHandlerClient({ cookies })
     const { data } = await supabase.auth.exchangeCodeForSession(code)
     
     if (data.user) {
+      // If recovery go to reset pass page
+      if (type === 'recovery') {
+        return NextResponse.redirect(new URL('/reset-password', request.url))
+      }
+
+      // Regular login flow
       const { data: family } = await supabase
         .from('families')
         .select('id')

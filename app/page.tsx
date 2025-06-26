@@ -59,7 +59,7 @@ export default function Landing() {
               <Link href="/login" className="text-gray-600 hover:text-gray-900 text-sm font-medium transition-colors duration-300">
                 Sign in
               </Link>
-              <Link href="/onboarding" className="px-6 py-3 bg-gray-900 text-white rounded-full hover:bg-gray-800 transition-all duration-300 text-sm font-medium hover:shadow-lg hover:scale-105">
+              <Link href="/signup" className="px-6 py-3 bg-gray-900 text-white rounded-full hover:bg-gray-800 transition-all duration-300 text-sm font-medium hover:shadow-lg hover:scale-105">
                 Get started
               </Link>
             </div>
@@ -76,7 +76,7 @@ export default function Landing() {
           <p className="text-2xl text-gray-600 mb-12 max-w-3xl mx-auto leading-relaxed font-light">
             A simple, elegant way for families to manage tasks, track progress, and reward accomplishments.
           </p>
-          <Link href="/onboarding" className="inline-flex items-center gap-3 px-10 py-4 bg-gray-900 text-white rounded-full hover:bg-gray-800 transition-all duration-300 text-lg font-medium hover:shadow-xl hover:scale-105 group">
+          <Link href="/signup" className="inline-flex items-center gap-3 px-10 py-4 bg-gray-900 text-white rounded-full hover:bg-gray-800 transition-all duration-300 text-lg font-medium hover:shadow-xl hover:scale-105 group">
             Start your family journey
             <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform duration-300" />
           </Link>
@@ -246,7 +246,7 @@ export default function Landing() {
           <p className="text-2xl text-gray-600 mb-12 max-w-3xl mx-auto font-light leading-relaxed">
             Be among the first families to experience a better way to manage chores and rewards.
           </p>
-          <Link href="/onboarding" className="inline-flex items-center gap-3 px-10 py-4 bg-gray-900 text-white rounded-full hover:bg-gray-800 transition-all duration-300 text-lg font-medium hover:shadow-xl hover:scale-105 group">
+          <Link href="/signup" className="inline-flex items-center gap-3 px-10 py-4 bg-gray-900 text-white rounded-full hover:bg-gray-800 transition-all duration-300 text-lg font-medium hover:shadow-xl hover:scale-105 group">
             Start your free account
             <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform duration-300" />
           </Link>
