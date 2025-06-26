@@ -27,13 +27,13 @@ export default function Onboarding() {
     setKids([...kids, { name: "", age: "" }])
   }
 
-  const removeKid = (index) => {
+  const removeKid = (index: number) => {
     if (kids.length > 1) {
       setKids(kids.filter((_, i) => i !== index))
     }
   }
 
-  const updateKid = (index, field, value) => {
+  const updateKid = (index: number, field: string, value: string) => {
     const updatedKids = kids.map((kid, i) => 
       i === index ? { ...kid, [field]: value } : kid
     )
@@ -63,8 +63,8 @@ export default function Onboarding() {
       setError("Please add at least one child")
       return false
     }
-    for (let kid of validKids) {
-      if (!kid.age || kid.age < 3 || kid.age > 18) {
+    for (const kid of validKids) {
+      if (!kid.age || parseInt(kid.age) < 3 || parseInt(kid.age) > 18) {
         setError("Please enter valid ages (3-18) for all children")
         return false
       }
@@ -98,7 +98,7 @@ export default function Onboarding() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error("Not authenticated")
 
-      // Create family
+      // Create family (real 😿)
       const { data: family, error: familyError } = await supabase
         .from('families')
         .insert({
@@ -111,7 +111,7 @@ export default function Onboarding() {
 
       if (familyError) throw familyError
 
-      // Create kids
+      // Create kids (DATABASE, NOT ACTUALLY...)
       const validKids = kids.filter(kid => kid.name.trim())
       const kidsData = validKids.map(kid => ({
         family_id: family.id,
@@ -125,42 +125,11 @@ export default function Onboarding() {
 
       if (kidsError) throw kidsError
 
-      // Create some sample tasks
-      const sampleTasks = [
-        {
-          family_id: family.id,
-          assigned_to: null, // Will be assigned later by parent
-          title: "Take out trash",
-          description: "Empty all trash cans and take to curb",
-          category: "Chores",
-          reward: 3.00,
-          difficulty: "Easy",
-          time_estimate: "5 min",
-          deadline: "Weekly",
-          urgent: false
-        },
-        {
-          family_id: family.id,
-          assigned_to: null,
-          title: "Load dishwasher",
-          description: "Load and start the dishwasher after dinner",
-          category: "Chores",
-          reward: 2.50,
-          difficulty: "Easy",
-          time_estimate: "10 min",
-          deadline: "Daily",
-          urgent: false
-        }
-      ]
-
-      await supabase.from('tasks').insert(sampleTasks)
-
-      // Redirect to dashboard
-      router.push('/')
+      router.push('/app')
       
     } catch (error) {
       console.error('Onboarding error:', error)
-      setError(error.message || "Failed to set up family. Please try again.")
+      setError(error instanceof Error ? error.message : "Failed to set up family. Please try again.")
     } finally {
       setLoading(false)
     }
@@ -171,10 +140,9 @@ export default function Onboarding() {
       <div className="max-w-md w-full">
         <div className="text-center mb-8">
           <h1 className="text-2xl font-medium text-gray-900">Welcome to Nerlo</h1>
-          <p className="mt-2 text-sm text-gray-600">Let's get your family set up</p>
+          <p className="mt-2 text-sm text-gray-600">Let&apos;s get your family set up</p>
         </div>
 
-        {/* Progress indicator */}
         <div className="flex items-center justify-center mb-8">
           <div className="flex items-center">
             <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
@@ -208,7 +176,6 @@ export default function Onboarding() {
             </div>
           )}
 
-          {/* Step 1: Family Setup */}
           {currentStep === 1 && (
             <div>
               <h3 className="text-lg font-medium text-gray-900 mb-6">Family Setup</h3>
@@ -261,7 +228,6 @@ export default function Onboarding() {
             </div>
           )}
 
-          {/* Step 2: Add Kids */}
           {currentStep === 2 && (
             <div>
               <h3 className="text-lg font-medium text-gray-900 mb-6">Add Your Children</h3>
@@ -311,7 +277,6 @@ export default function Onboarding() {
             </div>
           )}
 
-          {/* Step 3: Review */}
           {currentStep === 3 && (
             <div>
               <h3 className="text-lg font-medium text-gray-900 mb-6">Review & Complete</h3>
@@ -340,9 +305,9 @@ export default function Onboarding() {
                 </div>
 
                 <div className="bg-blue-50 p-4 rounded-lg">
-                  <h4 className="text-sm font-medium text-blue-900 mb-2">What's next?</h4>
+                  <h4 className="text-sm font-medium text-blue-900 mb-2">What&apos;s next?</h4>
                   <ul className="text-xs text-blue-700 space-y-1">
-                    <li>• We'll create your family dashboard</li>
+                    <li>• We&apos;ll create your family dashboard</li>
                     <li>• Add some sample tasks to get started</li>
                     <li>• Your kids can start earning right away!</li>
                   </ul>
@@ -351,7 +316,6 @@ export default function Onboarding() {
             </div>
           )}
 
-          {/* Navigation buttons */}
           <div className="flex gap-3 mt-8">
             {currentStep > 1 && (
               <button

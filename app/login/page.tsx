@@ -33,12 +33,12 @@ export default function Login() {
         .single()
 
       if (family) {
-        window.location.href = '/'
+        window.location.href = '/app'
       } else {
         window.location.href = '/onboarding'
       }
-    } catch (error: any) {
-      setError(error.message)
+    } catch (error: unknown) {
+      setError(error instanceof Error ? error.message : 'An error occurred')
     } finally {
       setLoading(false)
     }
@@ -54,8 +54,8 @@ export default function Login() {
         }
       })
       if (error) throw error
-    } catch (error: any) {
-      setError(error.message)
+    } catch (error: unknown) {
+      setError(error instanceof Error ? error.message : 'An error occurred')
       setLoading(false)
     }
   }
@@ -167,7 +167,7 @@ export default function Login() {
 
         <div className="text-center">
           <p className="text-sm text-gray-600">
-            Don't have an account?{" "}
+            Don&apos;t have an account?{" "}
             <Link href="/signup" className="font-medium text-gray-900 hover:text-gray-700">
               Sign up
             </Link>

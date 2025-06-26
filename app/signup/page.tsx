@@ -38,8 +38,8 @@ export default function Signup() {
       })
       if (error) throw error
       setMessage("Check your email for the confirmation link!")
-    } catch (error: any) {
-      setError(error.message)
+    } catch (error: unknown) {
+      setError(error instanceof Error ? error.message : 'An error occurred')
     } finally {
       setLoading(false)
     }
@@ -55,8 +55,8 @@ export default function Signup() {
         }
       })
       if (error) throw error
-    } catch (error: any) {
-      setError(error.message)
+    } catch (error: unknown) {
+      setError(error instanceof Error ? error.message : 'An error occurred')
       setLoading(false)
     }
   }

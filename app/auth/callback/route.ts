@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
         .single()
 
       if (family) {
-        return NextResponse.redirect(new URL('/', request.url))
+        return NextResponse.redirect(new URL('/app', request.url))
       } else {
         return NextResponse.redirect(new URL('/onboarding', request.url))
       }

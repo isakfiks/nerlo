@@ -1,5 +1,5 @@
 "use client";
-import { Bell, CheckCircle2, Clock, DollarSign, Star, User, Flame, LogOut, Settings, Plus, ArrowRight } from 'lucide-react';
+import { Bell, CheckCircle2, Star, User, Flame, LogOut, Plus } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
@@ -14,7 +14,13 @@ export default function Dash() {
   const [showParentPinModal, setShowParentPinModal] = useState(false)
   const [parentPin, setParentPin] = useState("")
   const [selectedKid, setSelectedKid] = useState<{ id: string; name: string; } | null>(null)
-  const [kids, setKids] = useState<any[]>([])
+  interface kid {
+    id: string;
+    name: string;
+    family_id: string;
+    created_at: string;
+  }
+  const [kids, setKids] = useState<kid[]>([])
   const [loading, setLoading] = useState(true)
   const [parentSession, setParentSession] = useState<{ id: string; expires_at: string } | null>(null)
 
@@ -38,17 +44,46 @@ export default function Dash() {
     current: 0,
   });
 
-  const [tasks, setTasks] = useState<any[]>([]);
-  const [ongoingTasks, setOngoingTasks] = useState<any[]>([]);
-  const [completedTasks, setCompletedTasks] = useState<any[]>([]);
-  const [goals, setGoals] = useState<any[]>([]);
+  interface Task {
+    id: string;
+    title: string;
+    description: string;
+    category: string;
+    reward: number;
+    deadline?: string;
+    time_estimate: string;
+    difficulty: string;
+    status: 'available' | 'in_progress' | 'completed' | 'approved';
+    assigned_to?: string | null;
+    family_id: string;
+    created_at: string;
+    completed_at?: string;
+    started_at?: string;
+    work_time_ms?: number;
+    urgent?: boolean;
+    kids?: { name: string };
+  }
+
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [ongoingTasks, setOngoingTasks] = useState<Task[]>([]);
+  const [completedTasks, setCompletedTasks] = useState<Task[]>([]);
+  interface Goal {
+    id: string;
+    name: string;
+    target: number;
+    current: number;
+    kid_id: string;
+    created_at: string;
+  }
+
+  const [goals, setGoals] = useState<Goal[]>([]);
   type Notification = {
     id: string;
     message: string;
     read: boolean;
     time: string;
   };
-  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [notifications ] = useState<Notification[]>([]);
   const [stats, setStats] = useState({
     totalEarned: 0,
     pendingEarnings: 0,
@@ -268,7 +303,7 @@ export default function Dash() {
     }
   };
 
-  const calculateKidStats = (availableTasks: any[], completedTasks: any[]) => {
+  const calculateKidStats = (availableTasks: Task[], completedTasks: Task[]) => {
     const totalEarned =
       completedTasks?.filter((task) => task.status === 'approved')?.reduce((sum, task) => sum + task.reward, 0) || 0;
 
@@ -305,7 +340,7 @@ export default function Dash() {
     });
   };
 
-  const calculateFamilyStats = (allTasks: any[]) => {
+  const calculateFamilyStats = (allTasks: Task[]) => {
     const totalEarned =
       allTasks?.filter((task) => task.status === 'approved')?.reduce((sum, task) => sum + task.reward, 0) || 0;
 
@@ -323,7 +358,7 @@ export default function Dash() {
     ) || [];
 
     const thisWeekAssigned = allTasks?.filter(task =>
-      task.created_at && new Date(task.createdAt) >= thisWeekStart
+      task.created_at && new Date(task.created_at) >= thisWeekStart
     ) || [];
 
     const completionRate = thisWeekAssigned.length > 0 
@@ -345,11 +380,11 @@ export default function Dash() {
   };
 
   // Calculate individual streak
-  const calculateStreak = (completedTasks: any[]) => {
+  const calculateStreak = (completedTasks: Task[]) => {
     if (!completedTasks || completedTasks.length === 0) return 0;
 
     // Group tasks by completion date
-    const tasksByDate: { [key: string]: any[] } = {};
+    const tasksByDate: { [key: string]: Task[] } = {};
     completedTasks.forEach(task => {
       if (task.completed_at) {
         const date = new Date(task.completed_at).toDateString();
@@ -360,9 +395,9 @@ export default function Dash() {
       }
     });
 
-    // Calculate current streak
+    // Calculate streak
     let streak = 0;
-    let currentDate = new Date();
+    const currentDate = new Date();
     
     while (true) {
       const dateString = currentDate.toDateString();
@@ -388,11 +423,11 @@ export default function Dash() {
     return streak;
   };
 
-  const calculateFamilyStreak = (allTasks: any[]) => {
+  const calculateFamilyStreak = (allTasks: Task[]) => {
     if (!allTasks || allTasks.length === 0) return 0;
 
     // Group tasks by kid
-    const tasksByKid: { [key: string]: any[] } = {};
+    const tasksByKid: { [key: string]: Task[] } = {};
     allTasks.forEach(task => {
       if (task.assigned_to && ['completed', 'approved'].includes(task.status)) {
         if (!tasksByKid[task.assigned_to]) {
@@ -402,7 +437,7 @@ export default function Dash() {
       }
     });
 
-    // Calculate streak for each kid and return the highest
+    // Calculate streak for each kid and return highest
     let maxStreak = 0;
     Object.values(tasksByKid).forEach(kidTasks => {
       const kidStreak = calculateStreak(kidTasks);
@@ -414,7 +449,6 @@ export default function Dash() {
     return maxStreak;
   };
 
-  // New function to handle task creation
   const handleCreateTask = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     try {
@@ -428,7 +462,7 @@ export default function Dash() {
         family_id: family.id,
         status: 'available',
         created_at: new Date().toISOString(),
-        assigned_to: newTask.assigned_to || null, // Convert empty string to null
+        assigned_to: newTask.assigned_to || null,
       };
 
       const { error } = await supabase.from('tasks').insert(taskData);
@@ -631,7 +665,7 @@ export default function Dash() {
 
   const handleSignOut = async () => {
     try {
-      // Invalidate parent session if exists
+      // Invalidate parent session if it does exists
       if (parentSession) {
         await supabase.from('parent_sessions').update({ is_active: false }).eq('id', parentSession.id);
       }
@@ -979,7 +1013,7 @@ export default function Dash() {
                             {isParentMode && task.kids?.name && (
                               <span>{task.kids.name} • </span>
                             )}
-                            {task.completed_at ? new Date(task.completed_at).toLocaleDateString() : task.completedAt}
+                            {task.completed_at ? new Date(task.completed_at).toLocaleDateString() : task.completed_at}
                             {task.work_time_ms && (
                               <span> • {Math.round(task.work_time_ms / 60000)}min worked</span>
                             )}

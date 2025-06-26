@@ -6,16 +6,23 @@ import { ArrowLeft, Play, Pause, Check } from 'lucide-react';
 import Link from 'next/link';
 
 export default function TaskPage() {
-  const [task, setTask] = useState(null);
+  interface Task {
+    id: string;
+    title: string;
+    description?: string;
+    reward: number;
+    work_time_ms: number;
+    status: string;
+    started_at?: string;
+    notes?: string;
+  }
+
+  const [task, setTask] = useState<Task | null>(null);
   const [loading, setLoading] = useState(true);
   const [notes, setNotes] = useState('');
-  const [startTime, setStartTime] = useState(null);
-  const [workTime, setWorkTime] = useState(0); // Total work time (excluding breaks)
-  const [elapsedTime, setElapsedTime] = useState(0); // Total elapsed time
+  const [startTime, setStartTime] = useState<number | null>(null);
   const [isPaused, setIsPaused] = useState(false);
-  const [currentSessionStart, setCurrentSessionStart] = useState(null);
-  const [user, setUser] = useState(null);
-  const [selectedKid, setSelectedKid] = useState(null);
+  const [currentSessionStart, setCurrentSessionStart] = useState<number | null>(null);
 
   const router = useRouter();
   const params = useParams();
@@ -26,25 +33,17 @@ export default function TaskPage() {
   }, []);
 
   useEffect(() => {
-    let interval;
+    const interval: NodeJS.Timeout | null = null;
     if (startTime && !isPaused) {
-      interval = setInterval(() => {
-        const now = Date.now();
-        setElapsedTime(now - startTime);
-        
-        // Update work time if we have a session start
-        if (currentSessionStart) {
-          const sessionTime = now - currentSessionStart;
-          setWorkTime(task.work_time_ms + sessionTime);
-        }
-      }, 1000);
     }
-    return () => clearInterval(interval);
+    return () => {
+      if (interval) clearInterval(interval);
+    };
   }, [startTime, isPaused, currentSessionStart, task?.work_time_ms]);
 
   // Periodic save every 30 seconds and on page unload
   useEffect(() => {
-    let saveInterval;
+    let saveInterval: NodeJS.Timeout | undefined;
     
     const saveWorkTime = async () => {
       if (currentSessionStart && !isPaused && task?.id) {
@@ -97,19 +96,6 @@ export default function TaskPage() {
         return;
       }
 
-      setUser(user);
-
-      // Get selected kid from localStorage
-      const selectedKidId = localStorage.getItem('selectedKidId');
-      if (selectedKidId) {
-        const { data: kid } = await supabase
-          .from('kids')
-          .select('*')
-          .eq('id', selectedKidId)
-          .single();
-        setSelectedKid(kid);
-      }
-
       await loadTask();
     } catch (error) {
       console.error('Error checking user:', error);
@@ -129,7 +115,6 @@ export default function TaskPage() {
 
       setTask(taskData);
       
-      // Use started_at from database if available
       if (taskData.started_at) {
         const dbStartTime = new Date(taskData.started_at).getTime();
         setStartTime(dbStartTime);
@@ -138,9 +123,6 @@ export default function TaskPage() {
         if (taskData.status === 'in_progress') {
           setCurrentSessionStart(Date.now());
         }
-        
-        // Load work time from database
-        setWorkTime(taskData.work_time_ms || 0);
       }
       
       setNotes(taskData.notes || '');
@@ -160,7 +142,7 @@ export default function TaskPage() {
         setCurrentSessionStart(Date.now());
       } else {
         // Pause - calculate final work time and save to database
-        let finalWorkTime = task.work_time_ms || 0;
+        let finalWorkTime = task?.work_time_ms || 0;
         if (currentSessionStart) {
           finalWorkTime += Date.now() - currentSessionStart;
         }
@@ -168,12 +150,12 @@ export default function TaskPage() {
         const { error } = await supabase
           .from('tasks')
           .update({ work_time_ms: finalWorkTime })
-          .eq('id', task.id);
+          .eq('id', task?.id);
 
         if (error) throw error;
 
         // Update local state
-        setTask(prev => ({ ...prev, work_time_ms: finalWorkTime }));
+        setTask(prev => prev ? { ...prev, work_time_ms: finalWorkTime } : null);
         setIsPaused(true);
         setCurrentSessionStart(null);
       }
@@ -185,7 +167,7 @@ export default function TaskPage() {
   const handleCompleteTask = async () => {
     try {
       // Calculate final work time
-      let finalWorkTime = task.work_time_ms || 0;
+      let finalWorkTime = task?.work_time_ms || 0;
       if (currentSessionStart && !isPaused) {
         finalWorkTime += Date.now() - currentSessionStart;
       }
@@ -198,7 +180,7 @@ export default function TaskPage() {
           work_time_ms: finalWorkTime,
           notes: notes,
         })
-        .eq('id', task.id);
+        .eq('id', task?.id);
 
       if (error) throw error;
 
@@ -209,7 +191,7 @@ export default function TaskPage() {
     }
   };
 
-  const formatTime = (ms) => {
+  const formatTime = (ms: number) => {
     const seconds = Math.floor(ms / 1000);
     const minutes = Math.floor(seconds / 60);
     const hours = Math.floor(minutes / 60);
@@ -223,11 +205,9 @@ export default function TaskPage() {
     }
   };
 
-  // Calculate current work time including current session
   const getCurrentWorkTime = () => {
     let currentWorkTime = task?.work_time_ms || 0;
     
-    // Add current session time if we're actively working
     if (currentSessionStart && !isPaused) {
       currentWorkTime += Date.now() - currentSessionStart;
     }
@@ -258,7 +238,6 @@ export default function TaskPage() {
 
   return (
     <div className="min-h-screen bg-white">
-      {/* Header */}
       <div className="border-b border-gray-100">
         <div className="max-w-2xl mx-auto px-8 py-6">
           <Link href="/" className="inline-flex items-center gap-3 text-gray-500 hover:text-gray-900 transition-colors">
@@ -268,10 +247,8 @@ export default function TaskPage() {
         </div>
       </div>
 
-      {/* Main Content */}
       <div className="max-w-2xl mx-auto px-8 py-16">
         
-        {/* Task Title */}
         <div className="mb-16 text-center">
           <h1 className="text-3xl font-light text-gray-900 mb-6 tracking-tight">
             {task.title}
@@ -284,9 +261,7 @@ export default function TaskPage() {
           )}
         </div>
 
-        {/* Stats Grid */}
         <div className="grid grid-cols-2 gap-12 mb-16">
-          {/* Reward */}
           <div className="text-center">
             <div className="text-3xl font-light text-gray-900 mb-2">
               ${task.reward.toFixed(2)}
@@ -296,7 +271,6 @@ export default function TaskPage() {
             </div>
           </div>
 
-          {/* Time */}
           <div className="text-center">
             <div className="text-3xl font-light text-gray-900 mb-2">
               {startTime ? formatTime(getCurrentWorkTime()) : '0:00'}
@@ -307,7 +281,6 @@ export default function TaskPage() {
           </div>
         </div>
 
-        {/* Controls */}
         <div className="flex justify-center gap-4 mb-16">
           {startTime && (
             <button
@@ -337,7 +310,6 @@ export default function TaskPage() {
           </button>
         </div>
 
-        {/* Notes */}
         <div className="mb-16">
           <label className="block text-sm text-gray-500 uppercase tracking-wide mb-4">
             Notes (optional)
@@ -352,7 +324,6 @@ export default function TaskPage() {
           <div className="h-px bg-gray-200 mt-4"></div>
         </div>
 
-        {/* Status indicator */}
         {isPaused && (
           <div className="text-center">
             <div className="inline-flex items-center gap-2 px-4 py-2 bg-gray-50 rounded-full text-sm text-gray-600">
