@@ -13,19 +13,10 @@ interface Stats {
 
 export default function Landing() {
   const [isVisible, setIsVisible] = useState(false);
-  const [stats, setStats] = useState<Stats>({
-    families: '1+',
-    tasksCompleted: '1+',
-    totalEarned: '$5+',
-    lastUpdated: Date.now(),
-    nextUpdate: 30000
-  });
-  const [isLoading, setIsLoading] = useState(false);
+  const [stats, setStats] = useState<Stats | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   const fetchStats = async () => {
-    if (isLoading) return;
-    
-    setIsLoading(true);
     try {
       const response = await fetch('/api/stats');
       if (response.ok) {
@@ -34,6 +25,14 @@ export default function Landing() {
       }
     } catch (error) {
       console.error('Failed to fetch stats:', error);
+      // Fallback stats if API fails
+      setStats({
+        families: '1+',
+        tasksCompleted: '1+',
+        totalEarned: '$5+',
+        lastUpdated: Date.now(),
+        nextUpdate: 30000
+      });
     } finally {
       setIsLoading(false);
     }
@@ -44,7 +43,10 @@ export default function Landing() {
     fetchStats();
 
     // Set up periodic updates
-    const interval = setInterval(fetchStats, 35000); // Fetch every 35 seconds
+    const interval = setInterval(() => {
+      setIsLoading(true);
+      fetchStats();
+    }, 35000);
     
     return () => clearInterval(interval);
   }, []);
@@ -84,32 +86,56 @@ export default function Landing() {
 
         <div className={`grid grid-cols-3 gap-16 text-center py-24 border-t border-gray-100 transform transition-all duration-1000 delay-300 ${isVisible ? 'translate-y-0 opacity-100' : 'translate-y-12 opacity-0'}`}>
           <div className="hover:scale-105 transition-transform duration-300 group">
-            <div className={`text-5xl font-extralight text-gray-900 mb-4 tracking-tight transition-all duration-500 ${isLoading ? 'opacity-50' : 'opacity-100'}`}>
-              {stats.families}
-            </div>
-            <div className="text-base text-gray-500 font-medium">Families using Nerlo</div>
-            {isLoading && <div className="w-2 h-2 bg-green-500 rounded-full mx-auto mt-2 animate-pulse"></div>}
+            {isLoading ? (
+              <div className="animate-pulse">
+                <div className="h-12 bg-gray-200 rounded mb-4 mx-auto w-20"></div>
+                <div className="h-4 bg-gray-200 rounded mx-auto w-32"></div>
+              </div>
+            ) : (
+              <>
+                <div className="text-5xl font-extralight text-gray-900 mb-4 tracking-tight">
+                  {stats?.families}
+                </div>
+                <div className="text-base text-gray-500 font-medium">Families using Nerlo</div>
+              </>
+            )}
           </div>
           <div className="hover:scale-105 transition-transform duration-300 group">
-            <div className={`text-5xl font-extralight text-gray-900 mb-4 tracking-tight transition-all duration-500 ${isLoading ? 'opacity-50' : 'opacity-100'}`}>
-              {stats.tasksCompleted}
-            </div>
-            <div className="text-base text-gray-500 font-medium">Tasks completed</div>
-            {isLoading && <div className="w-2 h-2 bg-blue-500 rounded-full mx-auto mt-2 animate-pulse"></div>}
+            {isLoading ? (
+              <div className="animate-pulse">
+                <div className="h-12 bg-gray-200 rounded mb-4 mx-auto w-20"></div>
+                <div className="h-4 bg-gray-200 rounded mx-auto w-28"></div>
+              </div>
+            ) : (
+              <>
+                <div className="text-5xl font-extralight text-gray-900 mb-4 tracking-tight">
+                  {stats?.tasksCompleted}
+                </div>
+                <div className="text-base text-gray-500 font-medium">Tasks completed</div>
+              </>
+            )}
           </div>
           <div className="hover:scale-105 transition-transform duration-300 group">
-            <div className={`text-5xl font-extralight text-gray-900 mb-4 tracking-tight transition-all duration-500 ${isLoading ? 'opacity-50' : 'opacity-100'}`}>
-              {stats.totalEarned}
-            </div>
-            <div className="text-base text-gray-500 font-medium">Earned by kids</div>
-            {isLoading && <div className="w-2 h-2 bg-yellow-500 rounded-full mx-auto mt-2 animate-pulse"></div>}
+            {isLoading ? (
+              <div className="animate-pulse">
+                <div className="h-12 bg-gray-200 rounded mb-4 mx-auto w-20"></div>
+                <div className="h-4 bg-gray-200 rounded mx-auto w-24"></div>
+              </div>
+            ) : (
+              <>
+                <div className="text-5xl font-extralight text-gray-900 mb-4 tracking-tight">
+                  {stats?.totalEarned}
+                </div>
+                <div className="text-base text-gray-500 font-medium">Earned by kids</div>
+              </>
+            )}
           </div>
         </div>
 
         <div className="text-center mt-8">
           <div className="inline-flex items-center gap-2 text-sm text-gray-500">
-            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-            Live statistics
+            <div className={`w-2 h-2 rounded-full ${isLoading ? 'bg-yellow-500 animate-pulse' : 'bg-green-500 animate-pulse'}`}></div>
+            {isLoading ? 'Updating statistics...' : 'Live statistics'}
           </div>
         </div>
       </section>
