@@ -931,6 +931,15 @@ export default function Dash() {
                 {showUserMenu && (
                   <div className="absolute right-0 top-10 w-48 bg-white rounded-lg shadow-xl border border-gray-100 z-50">
                     <div className="p-2">
+                      {isParentMode && (
+                        <Link
+                          href="/settings"
+                          className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg"
+                          onClick={() => setShowUserMenu(false)}
+                        >
+                          <span>Settings</span>
+                        </Link>
+                      )}
                       <button
                         onClick={handleSignOut}
                         className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg"
