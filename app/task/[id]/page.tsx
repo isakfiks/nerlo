@@ -2,8 +2,9 @@
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
-import { ArrowLeft, Play, Pause, Check } from 'lucide-react';
+import { ArrowLeft, Play, Pause, Check, X, Camera } from 'lucide-react';
 import Link from 'next/link';
+import { put } from '@vercel/blob';
 
 export default function TaskPage() {
   interface Task {
@@ -15,6 +16,7 @@ export default function TaskPage() {
     status: string;
     started_at?: string;
     notes?: string;
+    work_photos?: string[];
   }
 
   const [task, setTask] = useState<Task | null>(null);
@@ -23,7 +25,10 @@ export default function TaskPage() {
   const [startTime, setStartTime] = useState<number | null>(null);
   const [isPaused, setIsPaused] = useState(false);
   const [currentSessionStart, setCurrentSessionStart] = useState<number | null>(null);
-
+  const [uploadedImages, setUploadedImages] = useState<string[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [timerTick, setTimerTick] = useState(0); 
+  
   const router = useRouter();
   const params = useParams();
   const supabase = createClientComponentClient();
@@ -33,15 +38,18 @@ export default function TaskPage() {
   }, []);
 
   useEffect(() => {
-    const interval: NodeJS.Timeout | null = null;
+    let interval: NodeJS.Timeout | null = null;
     if (startTime && !isPaused) {
+      interval = setInterval(() => {
+        setTimerTick(t => t + 1); // Rerender
+        console.log(timerTick);
+      }, 1000);
     }
     return () => {
       if (interval) clearInterval(interval);
     };
   }, [startTime, isPaused, currentSessionStart, task?.work_time_ms]);
 
-  // Periodic save every 30 seconds and on page unload
   useEffect(() => {
     let saveInterval: NodeJS.Timeout | undefined;
     
@@ -61,18 +69,15 @@ export default function TaskPage() {
       }
     };
 
-    // Auto-save every 30 seconds
     if (currentSessionStart && !isPaused) {
       saveInterval = setInterval(saveWorkTime, 30000);
     }
 
-    // Save on page unload/refresh
     const handleBeforeUnload = () => {
       if (currentSessionStart && !isPaused && task?.id) {
         const sessionTime = Date.now() - currentSessionStart;
         const totalWorkTime = (task.work_time_ms || 0) + sessionTime;
         
-        // Use sendBeacon for reliable saving on page unload
         navigator.sendBeacon('/api/save-work-time', JSON.stringify({
           taskId: task.id,
           workTime: totalWorkTime
@@ -114,12 +119,12 @@ export default function TaskPage() {
       if (error) throw error;
 
       setTask(taskData);
+      setUploadedImages(taskData.work_photos || []);
       
       if (taskData.started_at) {
         const dbStartTime = new Date(taskData.started_at).getTime();
         setStartTime(dbStartTime);
         
-        // Only start session if not already completed
         if (taskData.status === 'in_progress') {
           setCurrentSessionStart(Date.now());
         }
@@ -134,14 +139,65 @@ export default function TaskPage() {
     }
   };
 
+  const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+
+    if (uploadedImages.length + files.length > 3) {
+      alert('You can only upload a maximum of 3 photos');
+      return;
+    }
+
+    setUploading(true);
+
+    try {
+      const newImageUrls: string[] = [];
+
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+
+        if (!file.type.startsWith('image/')) {
+          alert('Please only upload image files');
+          continue;
+        }
+
+        const blob = await put(`task-${task?.id}-${Date.now()}-${i}.${file.name.split('.').pop()}`, file, {
+          access: 'public',
+          token: 'vercel_blob_rw_YzIbsaKqZxvoC4gt_LkzYa0YQuvA3P6s5tYTOPkiadyomJM',
+        });
+
+        newImageUrls.push(blob.url);
+      }
+
+      const updatedImages = [...uploadedImages, ...newImageUrls];
+      setUploadedImages(updatedImages);
+
+      await supabase.from('tasks').update({ work_photos: updatedImages }).eq('id', task?.id);
+    } catch (error) {
+      console.error('Error uploading images:', error);
+      alert('Failed to upload images');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const removeImage = async (indexToRemove: number) => {
+    const updatedImages = uploadedImages.filter((_, index) => index !== indexToRemove);
+    setUploadedImages(updatedImages);
+
+    try {
+      await supabase.from('tasks').update({ work_photos: updatedImages }).eq('id', task?.id);
+    } catch (error) {
+      console.error('Error removing image:', error);
+    }
+  };
+
   const handlePauseResume = async () => {
     try {
       if (isPaused) {
-        // Resume - start new session
         setIsPaused(false);
         setCurrentSessionStart(Date.now());
       } else {
-        // Pause - calculate final work time and save to database
         let finalWorkTime = task?.work_time_ms || 0;
         if (currentSessionStart) {
           finalWorkTime += Date.now() - currentSessionStart;
@@ -154,7 +210,6 @@ export default function TaskPage() {
 
         if (error) throw error;
 
-        // Update local state
         setTask(prev => prev ? { ...prev, work_time_ms: finalWorkTime } : null);
         setIsPaused(true);
         setCurrentSessionStart(null);
@@ -165,8 +220,12 @@ export default function TaskPage() {
   };
 
   const handleCompleteTask = async () => {
+    if (uploadedImages.length === 0) {
+      alert('Please upload at least one photo of your work before completing the task');
+      return;
+    }
+
     try {
-      // Calculate final work time
       let finalWorkTime = task?.work_time_ms || 0;
       if (currentSessionStart && !isPaused) {
         finalWorkTime += Date.now() - currentSessionStart;
@@ -179,6 +238,7 @@ export default function TaskPage() {
           completed_at: new Date().toISOString(),
           work_time_ms: finalWorkTime,
           notes: notes,
+          work_photos: uploadedImages,
         })
         .eq('id', task?.id);
 
@@ -281,6 +341,57 @@ export default function TaskPage() {
           </div>
         </div>
 
+        <div className="mb-16">
+          <label className="block text-sm text-gray-500 uppercase tracking-wide mb-4">
+            Work Photos (Required - Max 3)
+          </label>
+
+          <div className="grid grid-cols-3 gap-4 mb-4">
+            {uploadedImages.map((imageUrl, index) => (
+              <div key={index} className="relative group">
+                <img
+                  src={imageUrl || "/placeholder.svg"}
+                  alt={`Work photo ${index + 1}`}
+                  className="w-full h-32 object-cover rounded-lg border border-gray-200"
+                />
+                <button
+                  onClick={() => removeImage(index)}
+                  className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            ))}
+
+            {uploadedImages.length < 3 && (
+              <label className="w-full h-32 border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:border-gray-400 transition-colors">
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={handleImageUpload}
+                  className="hidden"
+                  disabled={uploading}
+                />
+                {uploading ? (
+                  <div className="w-6 h-6 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div>
+                ) : (
+                  <>
+                    <Camera className="w-6 h-6 text-gray-400 mb-2" />
+                    <span className="text-sm text-gray-500">Add Photo</span>
+                  </>
+                )}
+              </label>
+            )}
+          </div>
+
+          {uploadedImages.length === 0 && (
+            <p className="text-sm text-red-500">Please upload at least one photo of your work</p>
+          )}
+
+          <p className="text-xs text-gray-400 mt-2">{uploadedImages.length}/3 photos uploaded</p>
+        </div>
+
         <div className="flex justify-center gap-4 mb-16">
           {startTime && (
             <button
@@ -303,7 +414,12 @@ export default function TaskPage() {
 
           <button
             onClick={handleCompleteTask}
-            className="flex items-center gap-2 px-8 py-3 bg-gray-900 text-white rounded-full hover:bg-gray-800 transition-colors"
+            disabled={uploadedImages.length === 0}
+            className={`flex items-center gap-2 px-8 py-3 rounded-full transition-colors ${
+              uploadedImages.length === 0
+                ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                : 'bg-gray-900 text-white hover:bg-gray-800'
+            }`}
           >
             <Check className="w-4 h-4" />
             <span>Complete</span>
@@ -341,7 +457,6 @@ export default function TaskPage() {
             </div>
           </div>
         )}
-
       </div>
     </div>
   );

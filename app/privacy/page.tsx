@@ -30,15 +30,15 @@ export default function Privacy() {
           </section>
 
           <section className="mb-12">
-            <h2 className="text-2xl font-medium text-gray-900 mb-4">2. Children's Privacy</h2>
+            <h2 className="text-2xl font-medium text-gray-900 mb-4">2. Children&apos;s Privacy</h2>
             <p className="text-gray-600 leading-relaxed mb-4">
-              We are committed to protecting children's privacy. For children under 13:
+              We are committed to protecting children&apos;s privacy. For children under 13:
             </p>
             <ul className="list-disc pl-6 text-gray-600 mb-4">
               <li>We require verifiable parental consent before collecting any personal information</li>
-              <li>Parents can review, modify, or delete their child's information at any time</li>
+              <li>Parents can review, modify, or delete their child&apos;s information at any time</li>
               <li>We collect only the minimum information necessary for the service</li>
-              <li>We do not share children's information with third parties for marketing purposes</li>
+              <li>We do not share children&apos;s information with third parties for marketing purposes</li>
             </ul>
           </section>
 

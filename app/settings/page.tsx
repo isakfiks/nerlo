@@ -89,7 +89,7 @@ export default function ParentSettings() {
     <div className="min-h-screen bg-white">
       <div className="border-b border-gray-100">
         <div className="max-w-2xl mx-auto px-8 py-6 flex items-center gap-4">
-          <Link href="/" className="text-gray-500 hover:text-gray-800 flex items-center">
+          <Link href="/app" className="text-gray-500 hover:text-gray-800 flex items-center">
             <ArrowLeft className="w-4 h-4 mr-1" />
             Back
           </Link>
