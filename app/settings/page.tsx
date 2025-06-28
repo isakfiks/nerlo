@@ -9,6 +9,7 @@ export default function ParentSettings() {
   const [checked, setChecked] = useState(false);
 
   const [currentPin, setCurrentPin] = useState("");
+  const [currency, setCurrency] = useState("");
   const [newPin, setNewPin] = useState("");
   const [confirmPin, setConfirmPin] = useState("");
   const [changingPin, setChangingPin] = useState(false);
@@ -80,6 +81,33 @@ export default function ParentSettings() {
     setChangingPin(false);
   };
 
+  const handleChangeCurrency = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMsg("");
+    setSuccessMsg("");
+    if (!currency) {
+      setErrorMsg("Please select a currency.");
+      return;
+    }
+    setChangingPin(true);
+    try {
+      const res = await fetch("/api/change-currency", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currency }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setErrorMsg(data.error || "Failed to update currency.");
+      } else {
+        setSuccessMsg("Currency updated successfully.");
+      }
+    } catch {
+      setErrorMsg("Failed to update currency.");
+    }
+    setChangingPin(false);
+  };
+
   if (!checked) {
     // Block render before verified parentmode
     return null;
@@ -99,6 +127,51 @@ export default function ParentSettings() {
 
       <div className="max-w-2xl mx-auto px-4 py-12">
         <div className="bg-white rounded-xl shadow border border-gray-100 max-w-md mx-auto p-8">
+          <h2 className="text-lg font-light text-gray-900 mb-8">General Settings</h2>
+          <form onSubmit={handleChangeCurrency} className="space-y-6">
+            <div>
+              <label className="block text-sm text-gray-700 mb-2">Currency</label>
+              <select
+                title="currency"
+                value={currency}
+                onChange={e => setCurrency(e.target.value)}
+                className="w-full p-0 border-0 text-gray-900 placeholder-gray-400 focus:outline-none text-lg bg-transparent"
+                required
+                autoComplete="off"
+              >
+                <option value="usd">
+                  USD ($)
+                </option>
+
+                <option value="eur">
+                  EUR (€)
+                </option>
+
+                <option value="gbp">
+                  GBP (£)
+                </option>
+
+                <option value="nok">
+                  NOK (kr)
+                </option>
+                </select>
+              <div className="h-px bg-gray-200 mt-2"></div>
+            </div>
+            {errorMsg && <div className="text-red-500 text-sm">{errorMsg}</div>}
+            {successMsg && <div className="text-green-600 text-sm">{successMsg}</div>}
+            <div className="flex gap-3 pt-4">
+              <button
+                type="submit"
+                disabled={changingPin}
+                className="flex-1 px-6 py-3 bg-gray-900 text-white rounded-full hover:bg-gray-800 transition-colors"
+              >
+                {changingPin ? "Updating..." : "Update Settings"}
+              </button>
+            </div>
+          </form>
+        </div>
+        
+        <div className="mt-8 bg-white rounded-xl shadow border border-gray-100 max-w-md mx-auto p-8">
           <h2 className="text-lg font-light text-gray-900 mb-8">Change Parent PIN</h2>
           <form onSubmit={handleChangePin} className="space-y-6">
             <div>

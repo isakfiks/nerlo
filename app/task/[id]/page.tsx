@@ -244,7 +244,7 @@ export default function TaskPage() {
 
       if (error) throw error;
 
-      router.push('app/?completed=true');
+      router.push('/app/?completed=true');
     } catch (error) {
       console.error('Error completing task:', error);
       alert('Failed to complete task');
