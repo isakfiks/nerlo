@@ -1,10 +1,12 @@
 "use client";
-import { Bell, CheckCircle2, Star, User, Flame, LogOut, Plus } from 'lucide-react';
+
+import { Bell, CheckCircle2, Star, User, Flame, LogOut, Plus, X, Check, XCircle } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
 import { useRouter } from 'next/navigation';
+import type React from 'react';
 
 export default function Dash() {
   const [showNotifications, setShowNotifications] = useState(false)
@@ -14,19 +16,25 @@ export default function Dash() {
   const [showParentPinModal, setShowParentPinModal] = useState(false)
   const [parentPin, setParentPin] = useState("")
   const [selectedKid, setSelectedKid] = useState<{ id: string; name: string; } | null>(null)
+  const [showReviewModal, setShowReviewModal] = useState(false);
+  const [reviewingTask, setReviewingTask] = useState<Task | null>(null);
+  const [taskImages, setTaskImages] = useState<string[]>([]);
+  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+
   interface kid {
     id: string;
     name: string;
     family_id: string;
     created_at: string;
   }
+
   const [kids, setKids] = useState<kid[]>([])
   const [loading, setLoading] = useState(true)
   const [parentSession, setParentSession] = useState<{ id: string; expires_at: string } | null>(null)
-
   const [showCreateTaskModal, setShowCreateTaskModal] = useState(false)
   const [showCreateGoalModal, setShowCreateGoalModal] = useState(false)
   const [editingGoal, setEditingGoal] = useState<{ id: string; name: string; target: number; current: number } | null>(null)
+
   const [newTask, setNewTask] = useState({
     title: "",
     description: "",
@@ -53,7 +61,7 @@ export default function Dash() {
     deadline?: string;
     time_estimate: string;
     difficulty: string;
-    status: 'available' | 'in_progress' | 'completed' | 'approved';
+    status: 'available' | 'in_progress' | 'completed' | 'approved' | 'rejected';
     assigned_to?: string | null;
     family_id: string;
     created_at: string;
@@ -62,11 +70,13 @@ export default function Dash() {
     work_time_ms?: number;
     urgent?: boolean;
     kids?: { name: string };
+    completion_notes?: string;
   }
 
   const [tasks, setTasks] = useState<Task[]>([]);
   const [ongoingTasks, setOngoingTasks] = useState<Task[]>([]);
   const [completedTasks, setCompletedTasks] = useState<Task[]>([]);
+
   interface Goal {
     id: string;
     name: string;
@@ -77,13 +87,16 @@ export default function Dash() {
   }
 
   const [goals, setGoals] = useState<Goal[]>([]);
+
   type Notification = {
     id: string;
     message: string;
     read: boolean;
     time: string;
   };
+
   const [notifications ] = useState<Notification[]>([]);
+
   const [stats, setStats] = useState({
     totalEarned: 0,
     pendingEarnings: 0,
@@ -109,6 +122,7 @@ export default function Dash() {
       const {
         data: { user },
       } = await supabase.auth.getUser();
+
       if (!user) {
         router.push('/login');
         return;
@@ -211,7 +225,6 @@ export default function Dash() {
 
       if (family) {
         const { data: familyKids } = await supabase.from('kids').select('*').eq('family_id', family.id);
-
         setKids(familyKids || []);
         await loadAllFamilyTasks(family.id);
       }
@@ -242,7 +255,7 @@ export default function Dash() {
         .from('tasks')
         .select('*')
         .eq('assigned_to', kidId)
-        .in('status', ['completed', 'approved'])
+        .in('status', ['completed', 'approved', 'rejected'])
         .order('completed_at', { ascending: false })
         .limit(10);
 
@@ -268,7 +281,7 @@ export default function Dash() {
 
       // Get family id
       const { data: family } = await supabase.from('families').select('*').eq('parent_id', user.id).single();
-      
+
       if (!family) return;
 
       await loadKidDataWithFamily(kidId, family.id);
@@ -291,7 +304,7 @@ export default function Dash() {
       const tasks = allTasks || [];
       const availableTasks = tasks.filter((task) => task.status === 'available');
       const inProgressTasks = tasks.filter((task) => task.status === 'in_progress');
-      const completed = tasks.filter((task) => ['completed', 'approved'].includes(task.status));
+      const completed = tasks.filter((task) => ['completed', 'approved', 'rejected'].includes(task.status));
 
       setTasks(availableTasks);
       setOngoingTasks(inProgressTasks);
@@ -300,6 +313,88 @@ export default function Dash() {
       calculateFamilyStats(tasks);
     } catch (error) {
       console.error('Error loading family tasks:', error);
+    }
+  };
+
+  const loadTaskImages = async (taskId: string) => {
+    try {
+      const { data: taskImagesData, error: imagesError } = await supabase
+        .from('tasks')
+        .select('work_photos')
+        .eq('task_id', taskId)
+        .order('created_at', { ascending: true });
+
+      if (!imagesError && taskImagesData && taskImagesData.length > 0) {
+        setTaskImages(taskImagesData.map((img) => img.work_photos));
+        return;
+      }
+
+      const { data: taskData, error: taskError } = await supabase
+        .from('tasks')
+        .select('work_photos')
+        .eq('id', taskId)
+        .single();
+
+      if (!taskError && taskData?.work_photos) {
+        const images = Array.isArray(taskData.work_photos)
+          ? taskData.work_photos
+          : JSON.parse(taskData.work_photos || '[]');
+        setTaskImages(images);
+      } else {
+        setTaskImages([]);
+      }
+    } catch (error) {
+      console.error('Error loading task images:', error);
+      setTaskImages([]);
+    }
+  };
+
+  const handleReviewTask = async (task: Task) => {
+    setReviewingTask(task);
+    setSelectedImageIndex(0);
+    await loadTaskImages(task.id);
+    setShowReviewModal(true);
+  };
+
+  const handleApproveTask = async () => {
+    if (!reviewingTask) return;
+
+    try {
+      const { error } = await supabase.from('tasks').update({ status: 'approved' }).eq('id', reviewingTask.id);
+
+      if (error) throw error;
+
+      setShowReviewModal(false);
+      setReviewingTask(null);
+      setTaskImages([]);
+
+      // Reload tasks
+      const { data: family } = await supabase.from('families').select('id').eq('parent_id', user?.id).single();
+      if (family) await loadAllFamilyTasks(family.id);
+    } catch (error) {
+      console.error('Error approving task:', error);
+      alert('Failed to approve task');
+    }
+  };
+
+  const handleRejectTask = async () => {
+    if (!reviewingTask) return;
+
+    try {
+      const { error } = await supabase.from('tasks').update({ status: 'rejected' }).eq('id', reviewingTask.id);
+
+      if (error) throw error;
+
+      setShowReviewModal(false);
+      setReviewingTask(null);
+      setTaskImages([]);
+
+      // Reload tasks
+      const { data: family } = await supabase.from('families').select('id').eq('parent_id', user?.id).single();
+      if (family) await loadAllFamilyTasks(family.id);
+    } catch (error) {
+      console.error('Error rejecting task:', error);
+      alert('Failed to reject task');
     }
   };
 
@@ -314,17 +409,15 @@ export default function Dash() {
     thisWeekStart.setDate(thisWeekStart.getDate() - thisWeekStart.getDay());
     thisWeekStart.setHours(0, 0, 0, 0);
 
-    const thisWeekCompleted = completedTasks?.filter(task => 
-      task.completed_at && new Date(task.completed_at) >= thisWeekStart
-    ) || [];
+    const thisWeekCompleted =
+      completedTasks?.filter((task) => task.completed_at && new Date(task.completed_at) >= thisWeekStart) || [];
 
-    const thisWeekAssigned = [...(availableTasks || []), ...(completedTasks || [])].filter(task =>
-      task.created_at && new Date(task.created_at) >= thisWeekStart
+    const thisWeekAssigned = [...(availableTasks || []), ...(completedTasks || [])].filter(
+      (task) => task.created_at && new Date(task.created_at) >= thisWeekStart,
     );
 
-    const completionRate = thisWeekAssigned.length > 0 
-      ? Math.round((thisWeekCompleted.length / thisWeekAssigned.length) * 100)
-      : 0;
+    const completionRate =
+      thisWeekAssigned.length > 0 ? Math.round((thisWeekCompleted.length / thisWeekAssigned.length) * 100) : 0;
 
     const currentStreak = calculateStreak(completedTasks);
 
@@ -351,19 +444,19 @@ export default function Dash() {
     thisWeekStart.setDate(thisWeekStart.getDate() - thisWeekStart.getDay());
     thisWeekStart.setHours(0, 0, 0, 0);
 
-    const thisWeekCompleted = allTasks?.filter(task => 
-      ['completed', 'approved'].includes(task.status) && 
-      task.completed_at && 
-      new Date(task.completed_at) >= thisWeekStart
-    ) || [];
+    const thisWeekCompleted =
+      allTasks?.filter(
+        (task) =>
+          ['completed', 'approved'].includes(task.status) &&
+          task.completed_at &&
+          new Date(task.completed_at) >= thisWeekStart,
+      ) || [];
 
-    const thisWeekAssigned = allTasks?.filter(task =>
-      task.created_at && new Date(task.created_at) >= thisWeekStart
-    ) || [];
+    const thisWeekAssigned =
+      allTasks?.filter((task) => task.created_at && new Date(task.created_at) >= thisWeekStart) || [];
 
-    const completionRate = thisWeekAssigned.length > 0 
-      ? Math.round((thisWeekCompleted.length / thisWeekAssigned.length) * 100)
-      : 0;
+    const completionRate =
+      thisWeekAssigned.length > 0 ? Math.round((thisWeekCompleted.length / thisWeekAssigned.length) * 100) : 0;
 
     const currentStreak = calculateFamilyStreak(allTasks);
 
@@ -385,7 +478,7 @@ export default function Dash() {
 
     // Group tasks by completion date
     const tasksByDate: { [key: string]: Task[] } = {};
-    completedTasks.forEach(task => {
+    completedTasks.forEach((task) => {
       if (task.completed_at) {
         const date = new Date(task.completed_at).toDateString();
         if (!tasksByDate[date]) {
@@ -398,7 +491,7 @@ export default function Dash() {
     // Calculate streak
     let streak = 0;
     const currentDate = new Date();
-    
+
     while (true) {
       const dateString = currentDate.toDateString();
       if (tasksByDate[dateString] && tasksByDate[dateString].length > 0) {
@@ -428,7 +521,7 @@ export default function Dash() {
 
     // Group tasks by kid
     const tasksByKid: { [key: string]: Task[] } = {};
-    allTasks.forEach(task => {
+    allTasks.forEach((task) => {
       if (task.assigned_to && ['completed', 'approved'].includes(task.status)) {
         if (!tasksByKid[task.assigned_to]) {
           tasksByKid[task.assigned_to] = [];
@@ -439,7 +532,7 @@ export default function Dash() {
 
     // Calculate streak for each kid and return highest
     let maxStreak = 0;
-    Object.values(tasksByKid).forEach(kidTasks => {
+    Object.values(tasksByKid).forEach((kidTasks) => {
       const kidStreak = calculateStreak(kidTasks);
       if (kidStreak > maxStreak) {
         maxStreak = kidStreak;
@@ -453,7 +546,6 @@ export default function Dash() {
     e.preventDefault();
     try {
       const { data: family } = await supabase.from('families').select('id').eq('parent_id', user?.id).single();
-
       if (!family) return;
 
       const taskData = {
@@ -466,7 +558,6 @@ export default function Dash() {
       };
 
       const { error } = await supabase.from('tasks').insert(taskData);
-
       if (error) throw error;
 
       // Reset form and close modal
@@ -509,21 +600,18 @@ export default function Dash() {
       let error;
       if (editingGoal) {
         // Update existing goal
-        ({ error } = await supabase
-          .from('goals')
-          .update(goalData)
-          .eq('id', editingGoal.id));
+        ;({ error } = await supabase.from('goals').update(goalData).eq('id', editingGoal.id));
       } else {
         // Create new goal
-        ({ error } = await supabase.from('goals').insert(goalData));
+        ;({ error } = await supabase.from('goals').insert(goalData));
       }
 
       if (error) throw error;
 
       // Reset form and close modal
       setNewGoal({
-        name: "",
-        target: "",
+        name: '',
+        target: '',
         current: 0,
       });
       setShowCreateGoalModal(false);
@@ -553,10 +641,7 @@ export default function Dash() {
     if (!confirm('Are you sure you want to delete this goal?')) return;
 
     try {
-      const { error } = await supabase
-        .from('goals')
-        .delete()
-        .eq('id', goalId);
+      const { error } = await supabase.from('goals').delete().eq('id', goalId);
 
       if (error) throw error;
 
@@ -598,7 +683,8 @@ export default function Dash() {
         setIsParentMode(true);
         setParentSession(newSession);
         setShowParentPinModal(false);
-        setParentPin("");
+        setParentPin('');
+
         if (user?.id) {
           await loadFamilyData(user.id);
         }
@@ -646,10 +732,10 @@ export default function Dash() {
 
       const { error } = await supabase
         .from('tasks')
-        .update({ 
+        .update({
           status: 'in_progress',
           assigned_to: selectedKid.id,
-          started_at: new Date().toISOString()
+          started_at: new Date().toISOString(),
         })
         .eq('id', taskId);
 
@@ -709,7 +795,6 @@ export default function Dash() {
             </div>
           </div>
         </div>
-
         <div className="max-w-5xl mx-auto px-8 py-16">
           <div className="text-center mb-24">
             <div className="h-16 w-32 bg-gray-200 rounded mx-auto mb-4 animate-pulse"></div>
@@ -720,7 +805,6 @@ export default function Dash() {
               <div className="h-4 w-20 bg-gray-200 rounded animate-pulse"></div>
             </div>
           </div>
-
           <div className="grid lg:grid-cols-4 gap-16">
             <div className="lg:col-span-3">
               <div className="mb-16">
@@ -750,7 +834,6 @@ export default function Dash() {
                   ))}
                 </div>
               </div>
-
               <div>
                 <div className="h-6 w-40 bg-gray-200 rounded mb-8 animate-pulse"></div>
                 <div className="space-y-4">
@@ -772,7 +855,6 @@ export default function Dash() {
                 </div>
               </div>
             </div>
-
             <div>
               <div className="mb-12">
                 <div className="h-5 w-16 bg-gray-200 rounded mb-6 animate-pulse"></div>
@@ -785,7 +867,6 @@ export default function Dash() {
                   ))}
                 </div>
               </div>
-
               <div className="mb-12">
                 <div className="flex items-center justify-between mb-6">
                   <div className="h-5 w-12 bg-gray-200 rounded animate-pulse"></div>
@@ -809,7 +890,6 @@ export default function Dash() {
                   ))}
                 </div>
               </div>
-
               <div className="p-4 bg-gray-50 rounded-lg">
                 <div className="h-4 w-full bg-gray-200 rounded mb-2 animate-pulse"></div>
                 <div className="h-4 w-3/4 bg-gray-200 rounded animate-pulse"></div>
@@ -842,7 +922,7 @@ export default function Dash() {
             <Link href="/">
               <h1 className="text-lg font-medium text-gray-900">Nerlo</h1>
             </Link>
-            
+
             <div className="flex items-center gap-8">
               {!isParentMode && kids.length > 1 && (
                 <select
@@ -860,7 +940,6 @@ export default function Dash() {
                   ))}
                 </select>
               )}
-
               {isParentMode ? (
                 <div className="flex items-center gap-3">
                   <span className="text-xs text-gray-500">Parent Mode</span>
@@ -876,11 +955,7 @@ export default function Dash() {
                   Parent Access
                 </button>
               )}
-
-              <div className="text-sm text-gray-500">
-                ${stats.pendingEarnings.toFixed(2)} pending
-              </div>
-
+              <div className="text-sm text-gray-500">${stats.pendingEarnings.toFixed(2)} pending</div>
               <div className="relative">
                 <button
                   onClick={() => setShowNotifications(!showNotifications)}
@@ -893,7 +968,6 @@ export default function Dash() {
                     </span>
                   )}
                 </button>
-
                 {showNotifications && (
                   <div className="absolute right-0 top-12 w-80 bg-white rounded-lg shadow-xl border border-gray-100 z-50">
                     <div className="p-6 border-b border-gray-100">
@@ -901,25 +975,18 @@ export default function Dash() {
                     </div>
                     <div className="max-h-96 overflow-y-auto p-2">
                       {notifications.length === 0 ? (
-                        <div className="p-6 text-center text-gray-400 text-sm">
-                          No notifications
-                        </div>
+                        <div className="p-6 text-center text-gray-400 text-sm">No notifications</div>
                       ) : (
                         notifications.map((notification) => (
-                          <div
-                            key={notification.id}
-                            className="p-4 hover:bg-gray-50 rounded-lg transition-colors"
-                          >
+                          <div key={notification.id} className="p-4 hover:bg-gray-50 rounded-lg transition-colors">
                             <div className="text-sm text-gray-900 mb-1">{notification.message}</div>
                             <div className="text-xs text-gray-500">{notification.time}</div>
                           </div>
-                        ))
-                      )}
+                        )))}
                     </div>
                   </div>
                 )}
               </div>
-
               <div className="relative">
                 <button
                   onClick={() => setShowUserMenu(!showUserMenu)}
@@ -927,7 +994,6 @@ export default function Dash() {
                 >
                   <User className="text-white w-4 h-4" />
                 </button>
-
                 {showUserMenu && (
                   <div className="absolute right-0 top-10 w-48 bg-white rounded-lg shadow-xl border border-gray-100 z-50">
                     <div className="p-2">
@@ -957,15 +1023,12 @@ export default function Dash() {
       </div>
 
       <div className="max-w-5xl mx-auto px-8 py-16">
-        
         <div className="text-center mb-24">
-          <div className="text-5xl font-light text-gray-900 mb-4">
-            ${stats.totalEarned.toFixed(2)}
-          </div>
+          <div className="text-5xl font-light text-gray-900 mb-4">${stats.totalEarned.toFixed(2)}</div>
           <div className="text-gray-500 mb-6">
             {isParentMode ? "Family earnings" : `${selectedKid?.name || "Your"} total earned`}
           </div>
-          
+
           <div className="flex items-center justify-center gap-8 text-sm text-gray-500">
             <div className="flex items-center gap-2">
               <Flame className="w-4 h-4 text-orange-400" />
@@ -975,19 +1038,16 @@ export default function Dash() {
               <Star className="w-4 h-4 text-yellow-500" />
               <span>{stats.weeklyStats.completionRate}% completion</span>
             </div>
-            <div className="text-gray-400">
-              ${totalAvailableEarnings.toFixed(2)} available
-            </div>
+            <div className="text-gray-400">${totalAvailableEarnings.toFixed(2)} available</div>
           </div>
         </div>
 
         <div className="grid lg:grid-cols-4 gap-16">
           <div className="lg:col-span-3">
-            
             {!isParentMode && ongoingTasks.length > 0 && (
               <div className="mb-16">
                 <h2 className="text-lg font-light text-gray-900 mb-8">Continue working</h2>
-                
+
                 <div className="space-y-6">
                   {ongoingTasks.map((task) => (
                     <div key={task.id} className="group">
@@ -1086,7 +1146,7 @@ export default function Dash() {
             {isParentMode && ongoingTasks.length > 0 && (
               <div className="mb-16">
                 <h2 className="text-lg font-light text-gray-900 mb-8">In progress</h2>
-                
+
                 <div className="space-y-1">
                   {ongoingTasks.map((task) => (
                     <div key={task.id} className="group">
@@ -1124,59 +1184,53 @@ export default function Dash() {
             <div>
               <div className="flex items-center justify-between mb-8">
                 <h2 className="text-lg font-light text-gray-900">Recent completions</h2>
-                {isParentMode && (
-                  <span className="text-sm text-gray-500">{completedTasks.length} completed</span>
-                )}
+                {isParentMode && <span className="text-sm text-gray-500">{completedTasks.length} completed</span>}
               </div>
-              
+
               <div className="space-y-1">
                 {completedTasks.map((task) => (
                   <div key={task.id} className="group">
                     <div className="flex items-center justify-between py-4 border-b border-gray-100">
                       <div className="flex items-center gap-4">
                         <div className="w-6 h-6 rounded-full bg-green-100 flex items-center justify-center">
-                          <CheckCircle2 className={`w-3 h-3 ${task.status === "approved" ? "text-green-600" : "text-orange-500"}`} />
+                          <CheckCircle2
+                            className={`w-3 h-3 ${
+                              task.status === "approved"
+                                ? "text-green-600"
+                                : task.status === "rejected"
+                                  ? "text-red-600"
+                                  : "text-orange-500"
+                            }`}
+                          />
                         </div>
                         <div>
                           <div className="text-gray-900 text-sm">{task.title}</div>
                           <div className="text-xs text-gray-500">
-                            {isParentMode && task.kids?.name && (
-                              <span>{task.kids.name} • </span>
-                            )}
+                            {isParentMode && task.kids?.name && <span>{task.kids.name} • </span>}
                             {task.completed_at ? new Date(task.completed_at).toLocaleDateString() : task.completed_at}
-                            {task.work_time_ms && (
-                              <span> • {Math.round(task.work_time_ms / 60000)}min worked</span>
-                            )}
+                            {task.work_time_ms && <span> • {Math.round(task.work_time_ms / 60000)}min worked</span>}
                           </div>
                         </div>
                       </div>
                       <div className="flex items-center gap-4">
                         <div className="text-sm text-gray-900">${task.reward.toFixed(2)}</div>
-                        <div className={`text-xs ${task.status === "approved" ? "text-green-600" : "text-orange-500"}`}>
-                          {task.status === "approved" ? "Paid" : "Pending"}
+                        <div
+                          className={`text-xs ${
+                            task.status === "approved"
+                              ? "text-green-600"
+                              : task.status === "rejected"
+                                ? "text-red-600"
+                                : "text-orange-500"
+                          }`}
+                        >
+                          {task.status === "approved" ? "Paid" : task.status === "rejected" ? "Rejected" : "Pending"}
                         </div>
                         {isParentMode && task.status === "completed" && (
                           <button
-                            onClick={async () => {
-                              try {
-                                const { error } = await supabase
-                                  .from('tasks')
-                                  .update({ status: 'approved' })
-                                  .eq('id', task.id);
-
-                                if (error) throw error;
-
-                                // Reload tasks
-                                const { data: family } = await supabase.from('families').select('id').eq('parent_id', user?.id).single();
-                                if (family) await loadAllFamilyTasks(family.id);
-                              } catch (error) {
-                                console.error('Error approving task:', error);
-                                alert('Failed to approve task');
-                              }
-                            }}
-                            className="opacity-0 group-hover:opacity-100 px-3 py-1 bg-green-600 text-white rounded-full text-xs hover:bg-green-700 transition-all"
+                            onClick={() => handleReviewTask(task)}
+                            className="opacity-0 group-hover:opacity-100 px-3 py-1 bg-blue-600 text-white rounded-full text-xs hover:bg-blue-700 transition-all"
                           >
-                            Approve
+                            Review
                           </button>
                         )}
                       </div>
@@ -1185,11 +1239,9 @@ export default function Dash() {
                 ))}
               </div>
             </div>
-
           </div>
 
           <div>
-            
             <div className="mb-12">
               <h3 className="text-sm font-medium text-gray-900 mb-6">This week</h3>
               <div className="space-y-4">
@@ -1212,7 +1264,7 @@ export default function Dash() {
               <div className="flex items-center justify-between mb-6">
                 <h3 className="text-sm font-medium text-gray-900">Goals</h3>
                 {!isParentMode && (
-                  <button 
+                  <button
                     onClick={() => setShowCreateGoalModal(true)}
                     className="text-xs text-gray-500 hover:text-gray-700"
                   >
@@ -1220,7 +1272,6 @@ export default function Dash() {
                   </button>
                 )}
               </div>
-
               <div className="space-y-6">
                 {goals.length === 0 ? (
                   <div className="text-center py-8">
@@ -1285,10 +1336,152 @@ export default function Dash() {
                   : "Complete tasks consistently to build momentum and unlock bonuses."}
               </div>
             </div>
-
           </div>
         </div>
       </div>
+
+      {showReviewModal && reviewingTask && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden">
+            <div className="flex items-center justify-between p-6 border-b border-gray-100">
+              <h3 className="text-lg font-medium text-gray-900">Review Task</h3>
+              <button
+                onClick={() => {
+                  setShowReviewModal(false);
+                  setReviewingTask(null);
+                  setTaskImages([]);
+                }}
+                className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+              >
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+
+            <div className="text-black flex flex-col lg:flex-row max-h-[calc(90vh-140px)]">
+              <div className="lg:w-1/3 p-6 border-r border-gray-100 overflow-y-auto">
+                <div className="space-y-4">
+                  <div>
+                    <h4 className="font-medium text-gray-900 mb-2">{reviewingTask.title}</h4>
+                    <p className="text-sm text-gray-600">{reviewingTask.description}</p>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <span className="text-gray-500">Category:</span>
+                      <div className="font-medium">{reviewingTask.category}</div>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">Reward:</span>
+                      <div className="font-medium">${reviewingTask.reward.toFixed(2)}</div>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">Time estimate:</span>
+                      <div className="font-medium">{reviewingTask.time_estimate}</div>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">Difficulty:</span>
+                      <div className="font-medium">{reviewingTask.difficulty}</div>
+                    </div>
+                  </div>
+
+                  {reviewingTask.completed_at && (
+                    <div>
+                      <span className="text-gray-500 text-sm">Completed:</span>
+                      <div className="font-medium text-sm">{new Date(reviewingTask.completed_at).toLocaleString()}</div>
+                    </div>
+                  )}
+
+                  {reviewingTask.work_time_ms && (
+                    <div>
+                      <span className="text-gray-500 text-sm">Time worked:</span>
+                      <div className="font-medium text-sm">
+                        {Math.round(reviewingTask.work_time_ms / 60000)} minutes
+                      </div>
+                    </div>
+                  )}
+
+                  {reviewingTask.completion_notes && (
+                    <div>
+                      <span className="text-gray-500 text-sm">Notes:</span>
+                      <div className="text-sm mt-1 p-3 bg-gray-50 rounded-lg">{reviewingTask.completion_notes}</div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="lg:w-2/3 flex flex-col">
+                {taskImages.length > 0 ? (
+                  <>
+                    <div className="flex-1 bg-gray-50 flex items-center justify-center p-6">
+                      <img
+                        src={taskImages[selectedImageIndex] || "/placeholder.svg"}
+                        alt={`Task completion ${selectedImageIndex + 1}`}
+                        className="max-w-full max-h-full object-contain rounded-lg shadow-lg"
+                        crossOrigin="anonymous"
+                      />
+                    </div>
+
+                    {taskImages.length > 1 && (
+                      <div className="p-4 border-t border-gray-100">
+                        <div className="flex gap-2 overflow-x-auto">
+                          {taskImages.map((image, index) => (
+                            <button
+                              key={index}
+                              onClick={() => setSelectedImageIndex(index)}
+                              className={`flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 transition-colors ${
+                                selectedImageIndex === index
+                                  ? "border-blue-500"
+                                  : "border-gray-200 hover:border-gray-300"
+                              }`}
+                            >
+                              <img
+                                src={image || "/placeholder.svg"}
+                                alt={`Thumbnail ${index + 1}`}
+                                className="w-full h-full object-cover"
+                                crossOrigin="anonymous"
+                              />
+                            </button>
+                          ))}
+                        </div>
+                        <div className="text-center text-xs text-gray-500 mt-2">
+                          {selectedImageIndex + 1} of {taskImages.length}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="flex-1 bg-gray-50 flex items-center justify-center p-6">
+                    <div className="text-center">
+                      <div className="text-gray-400 mb-2">No images submitted</div>
+                      <div className="text-sm text-gray-500">This task was completed without photo evidence</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="p-6 border-t border-gray-100 bg-gray-50">
+              <div className="flex gap-3 justify-end">
+                <button
+                  onClick={handleRejectTask}
+                  className="flex items-center gap-2 px-6 py-2 text-red-600 border border-red-200 rounded-full hover:bg-red-50 transition-colors"
+                >
+                  <XCircle className="w-4 h-4" />
+                  Reject
+                </button>
+                <button
+                  onClick={handleApproveTask}
+                  className="flex items-center gap-2 px-6 py-2 bg-green-600 text-white rounded-full hover:bg-green-700 transition-colors"
+                >
+                  <Check className="w-4 h-4" />
+                  Approve & Pay
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showCreateTaskModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -1306,7 +1499,6 @@ export default function Dash() {
                 />
                 <div className="h-px bg-gray-200 mt-2"></div>
               </div>
-
               <div>
                 <label className="block text-sm text-gray-700 mb-2">Description</label>
                 <textarea
@@ -1317,7 +1509,6 @@ export default function Dash() {
                 />
                 <div className="h-px bg-gray-200 mt-2"></div>
               </div>
-
               <div className="grid grid-cols-2 gap-6">
                 <div>
                   <label className="block text-sm text-gray-700 mb-2">Category</label>
@@ -1334,7 +1525,6 @@ export default function Dash() {
                   </select>
                   <div className="h-px bg-gray-200 mt-2"></div>
                 </div>
-
                 <div>
                   <label className="block text-sm text-gray-700 mb-2">Reward ($)</label>
                   <input
@@ -1348,7 +1538,6 @@ export default function Dash() {
                   <div className="h-px bg-gray-200 mt-2"></div>
                 </div>
               </div>
-
               <div>
                 <label className="block text-sm text-gray-700 mb-2">Assign to</label>
                 <select
@@ -1365,7 +1554,6 @@ export default function Dash() {
                 </select>
                 <div className="h-px bg-gray-200 mt-2"></div>
               </div>
-
               <div className="flex gap-3 pt-4">
                 <button
                   type="button"
@@ -1374,7 +1562,10 @@ export default function Dash() {
                 >
                   Cancel
                 </button>
-                <button type="submit" className="flex-1 px-6 py-3 bg-gray-900 text-white rounded-full hover:bg-gray-800 transition-colors">
+                <button
+                  type="submit"
+                  className="flex-1 px-6 py-3 bg-gray-900 text-white rounded-full hover:bg-gray-800 transition-colors"
+                >
                   Create Task
                 </button>
               </div>
@@ -1386,9 +1577,7 @@ export default function Dash() {
       {showCreateGoalModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white p-8 rounded-lg shadow-xl w-96">
-            <h3 className="text-lg font-medium text-gray-900 mb-6">
-              {editingGoal ? "Edit Goal" : "Create New Goal"}
-            </h3>
+            <h3 className="text-lg font-medium text-gray-900 mb-6">{editingGoal ? "Edit Goal" : "Create New Goal"}</h3>
             <form onSubmit={handleCreateGoal} className="space-y-6">
               <div>
                 <label className="block text-sm text-gray-700 mb-2">Goal Name</label>
@@ -1402,7 +1591,6 @@ export default function Dash() {
                 />
                 <div className="h-px bg-gray-200 mt-2"></div>
               </div>
-
               <div>
                 <label className="block text-sm text-gray-700 mb-2">Target Amount ($)</label>
                 <input
@@ -1416,7 +1604,6 @@ export default function Dash() {
                 />
                 <div className="h-px bg-gray-200 mt-2"></div>
               </div>
-
               <div className="flex gap-3 pt-4">
                 <button
                   type="button"
@@ -1433,7 +1620,10 @@ export default function Dash() {
                 >
                   Cancel
                 </button>
-                <button type="submit" className="flex-1 px-6 py-3 bg-gray-900 text-white rounded-full hover:bg-gray-800 transition-colors">
+                <button
+                  type="submit"
+                  className="flex-1 px-6 py-3 bg-gray-900 text-white rounded-full hover:bg-gray-800 transition-colors"
+                >
                   {editingGoal ? "Update Goal" : "Create Goal"}
                 </button>
               </div>
@@ -1449,9 +1639,7 @@ export default function Dash() {
               {isParentMode ? "Extend Session" : "Parent Access"}
             </h3>
             <p className="text-sm text-gray-600 mb-6">
-              {isParentMode
-                ? "Enter your PIN to extend the session"
-                : "Enter the parent PIN to access management"}
+              {isParentMode ? "Enter your PIN to extend the session" : "Enter the parent PIN to access management"}
             </p>
             <form onSubmit={handleParentPinSubmit}>
               <input
@@ -1475,7 +1663,10 @@ export default function Dash() {
                 >
                   Cancel
                 </button>
-                <button type="submit" className="flex-1 px-4 py-2 bg-gray-900 text-white rounded-full hover:bg-gray-800 transition-colors">
+                <button
+                  type="submit"
+                  className="flex-1 px-4 py-2 bg-gray-900 text-white rounded-full hover:bg-gray-800 transition-colors"
+                >
                   {isParentMode ? "Extend" : "Access"}
                 </button>
               </div>
@@ -1483,7 +1674,6 @@ export default function Dash() {
           </div>
         </div>
       )}
-
     </div>
   );
 }
